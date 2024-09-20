@@ -1,0 +1,66 @@
+このコードは、画像データの反射（ミラーリング）を行うための関数を定義しています。特に、データ拡張を目的として、トレーニングデータの画像を反転させる処理が含まれています。以下に、各関数について詳しく説明します。
+
+### コードの構成
+
+1. **インポート文**:
+   ```python
+   import torch
+   from jaxtyping import Float
+   from torch import Tensor
+
+   from ..types import AnyExample, AnyViews
+   ```
+   - PyTorch と `jaxtyping` を使ってテンソルの型を定義し、カスタム型 `AnyExample` と `AnyViews` をインポートしています。
+
+2. **`reflect_extrinsics`関数**:
+   ```python
+   def reflect_extrinsics(
+       extrinsics: Float[Tensor, "*batch 4 4"],
+   ) -> Float[Tensor, "*batch 4 4"]:
+       reflect = torch.eye(4, dtype=torch.float32, device=extrinsics.device)
+       reflect[0, 0] = -1
+       return reflect @ extrinsics @ reflect
+   ```
+   - **目的**: 外部行列（extrinsics）を反射させる。
+   - **処理内容**:
+     - 4x4 の単位行列を作成し、`reflect[0, 0]` を -1 に設定することで、X 軸に沿った反射行列を構築します。
+     - この反射行列を外部行列に適用して、反射した結果を返します。
+
+3. **`reflect_views`関数**:
+   ```python
+   def reflect_views(views: AnyViews) -> AnyViews:
+       return {
+           **views,
+           "image": views["image"].flip(-1),
+           "extrinsics": reflect_extrinsics(views["extrinsics"]),
+       }
+   ```
+   - **目的**: ビューのデータ（画像と外部行列）を反射させる。
+   - **処理内容**:
+     - 入力された `views` 辞書から、画像データを水平方向に反転（flip）し、外部行列を反射させた新しい辞書を返します。
+
+4. **`apply_augmentation_shim`関数**:
+   ```python
+   def apply_augmentation_shim(
+       example: AnyExample,
+       generator: torch.Generator | None = None,
+   ) -> AnyExample:
+       """Randomly augment the training images."""
+       # Do not augment with 50% chance.
+       if torch.rand(tuple(), generator=generator) < 0.5:
+           return example
+
+       return {
+           **example,
+           "context": reflect_views(example["context"]),
+           "target": reflect_views(example["target"]),
+       }
+   ```
+   - **目的**: トレーニングデータにランダムに拡張を適用する。
+   - **処理内容**:
+     - 50% の確率でデータを拡張せず、そのまま返します。
+     - 拡張する場合は、コンテキストとターゲットの両方に `reflect_views` を適用し、新しい辞書を返します。
+
+### まとめ
+
+このコードは、視点データの反射を行うことでデータの拡張を実現し、モデルの汎用性を高めることを目的としています。データ拡張は、モデルのトレーニングにおいてオーバーフィッティングを防ぎ、よりロバストなパフォーマンスを引き出すために重要な手法です。

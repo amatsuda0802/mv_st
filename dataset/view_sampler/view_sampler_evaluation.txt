@@ -1,0 +1,81 @@
+このコードは、評価のための視点サンプリングを行う `ViewSamplerEvaluation` クラスを定義しています。以下に、各部分について詳しく説明します。
+
+### コードの構成
+
+1. **インポート文**:
+   ```python
+   import json
+   from dataclasses import dataclass
+   from pathlib import Path
+   from typing import Literal
+
+   import torch
+   from dacite import Config, from_dict
+   from jaxtyping import Float, Int64
+   from torch import Tensor
+
+   from ...evaluation.evaluation_index_generator import IndexEntry
+   from ...misc.step_tracker import StepTracker
+   from ..types import Stage
+   from .view_sampler import ViewSampler
+   ```
+   - 必要なモジュールやライブラリをインポートしています。特に、`dacite` は JSON データを型安全に辞書に変換するために使用されています。
+
+2. **`ViewSamplerEvaluationCfg`データクラス**:
+   ```python
+   @dataclass
+   class ViewSamplerEvaluationCfg:
+       name: Literal["evaluation"]
+       index_path: Path
+       num_context_views: int
+   ```
+   - 評価サンプラーの設定を定義するデータクラスです。`index_path` は評価に使用するインデックスファイルのパスを指定します。
+
+3. **`ViewSamplerEvaluation`クラス**:
+   ```python
+   class ViewSamplerEvaluation(ViewSampler[ViewSamplerEvaluationCfg]):
+       index: dict[str, IndexEntry | None]
+   ```
+   - `ViewSampler` のサブクラスで、評価用の視点をサンプリングします。
+
+4. **初期化メソッド**:
+   ```python
+   def __init__(self, cfg: ViewSamplerEvaluationCfg, stage: Stage, is_overfitting: bool, cameras_are_circular: bool, step_tracker: StepTracker | None) -> None:
+       super().__init__(cfg, stage, is_overfitting, cameras_are_circular, step_tracker)
+
+       dacite_config = Config(cast=[tuple])
+       with cfg.index_path.open("r") as f:
+           self.index = {
+               k: None if v is None else from_dict(IndexEntry, v, dacite_config)
+               for k, v in json.load(f).items()
+           }
+   ```
+   - 設定を読み込む際に、JSONファイルを開いてインデックスを構築します。`dacite` を使って、各エントリを `IndexEntry` 型に変換します。
+
+5. **`sample`メソッド**:
+   ```python
+   def sample(self, scene: str, extrinsics: Float[Tensor, "view 4 4"], intrinsics: Float[Tensor, "view 3 3"], device: torch.device = torch.device("cpu")) -> tuple[Int64[Tensor, " context_view"], Int64[Tensor, " target_view"]]:
+       entry = self.index.get(scene)
+       if entry is None:
+           raise ValueError(f"No indices available for scene {scene}.")
+       context_indices = torch.tensor(entry.context, dtype=torch.int64, device=device)
+       target_indices = torch.tensor(entry.target, dtype=torch.int64, device=device)
+       return context_indices, target_indices
+   ```
+   - 指定されたシーンに対して、評価用のコンテキストインデックスとターゲットインデックスをサンプリングします。シーンが存在しない場合はエラーを返します。
+
+6. **プロパティ**:
+   ```python
+   @property
+   def num_context_views(self) -> int:
+       return 0
+
+   @property
+   def num_target_views(self) -> int:
+       return 0
+   ```
+   - コンテキストビューとターゲットビューの数を返しますが、評価サンプラーでは常に0を返します。
+
+### まとめ
+
+`ViewSamplerEvaluation` は、評価のために事前に定義された視点をサンプリングするためのクラスです。このクラスは、外部のインデックスファイルからシーンごとの視点情報を読み込み、特定のシーンに対して適切なコンテキストとターゲットのインデックスを提供します。これにより、モデルの評価を効率的に行うことができます。

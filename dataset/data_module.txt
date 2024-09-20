@@ -1,0 +1,81 @@
+このコードは、PyTorch Lightningを使用したデータモジュールの実装で、データのロードと前処理を管理する役割を担っています。データセットの設定やデータローダーの設定に基づいて、トレーニング、バリデーション、テスト用のデータを準備します。
+
+### コードの主要部分の解説
+
+1. **インポート**
+   ```python
+   import random
+   from dataclasses import dataclass
+   from typing import Callable
+   import numpy as np
+   import torch
+   from pytorch_lightning import LightningDataModule
+   from torch import Generator, nn
+   from torch.utils.data import DataLoader, Dataset, IterableDataset
+   ```
+   - 必要なライブラリやモジュールをインポートしています。特に、PyTorch Lightningとデータローダー関連のクラスが使用されています。
+
+2. **データシム関数の取得**
+   ```python
+   def get_data_shim(encoder: nn.Module) -> DataShim:
+       ...
+       return combined_shim
+   ```
+   - `get_data_shim` は、エンコーダーからバッチを変更するための関数を取得します。この関数は、バッチを GPU 上で変更する必要がある場合や、データローダーの外部からの変更が必要な場合に使用されます。
+
+3. **データローダーの設定用データクラス**
+   ```python
+   @dataclass
+   class DataLoaderStageCfg:
+       batch_size: int
+       num_workers: int
+       persistent_workers: bool
+       seed: int | None
+   ```
+   - `DataLoaderStageCfg` は、各データローダーの設定（バッチサイズ、ワーカー数、シード値など）を管理します。
+
+4. **データモジュールクラス**
+   ```python
+   class DataModule(LightningDataModule):
+       ...
+   ```
+   - `DataModule` クラスは、PyTorch Lightningの `LightningDataModule` を継承し、データローディングに関するメソッドを実装しています。
+
+5. **データローダーの作成メソッド**
+   - **トレーニングデータローダー**
+     ```python
+     def train_dataloader(self):
+         dataset = get_dataset(self.dataset_cfg, "train", self.step_tracker)
+         dataset = self.dataset_shim(dataset, "train")
+         return DataLoader(...)
+     ```
+     - トレーニングデータセットを取得し、データシムを適用した後、データローダーを生成します。
+
+   - **バリデーションデータローダー**
+     ```python
+     def val_dataloader(self):
+         dataset = get_dataset(self.dataset_cfg, "val", self.step_tracker)
+         ...
+         return DataLoader(...)
+     ```
+     - バリデーションデータセットを同様に処理し、`ValidationWrapper` を通じてデータローダーを生成します。
+
+   - **テストデータローダー**
+     ```python
+     def test_dataloader(self, dataset_cfg=None):
+         dataset = get_dataset(...)
+         ...
+         return DataLoader(...)
+     ```
+     - テストデータセットを取得し、データローダーを生成します。
+
+6. **ワーカー初期化関数**
+   ```python
+   def worker_init_fn(worker_id: int) -> None:
+       random.seed(int(torch.utils.data.get_worker_info().seed) % (2**32 - 1))
+       np.random.seed(int(torch.utils.data.get_worker_info().seed) % (2**32 - 1))
+   ```
+   - 各ワーカーの初期化時にシードを設定し、再現性を確保します。
+
+### まとめ
+このコードは、データセットの取得、データシムの適用、およびデータローダーの構成を行うクラスを定義しています。特に、PyTorch Lightningを利用することで、トレーニングプロセスを簡素化し、コードの可読性や再利用性を向上させています。データローディングの柔軟性や効率性を高めるために、シード管理やワーカーの設定も含まれています。

@@ -1,0 +1,95 @@
+このコードは、ビューサンプラーの基底クラスを定義しています。ビューサンプラーは、シーンの視点やカメラパラメータに基づいて、コンテキストビューとターゲットビューのインデックスをサンプリングするためのクラスです。以下に、各部分の詳細を説明します。
+
+### コードの構成
+
+1. **インポート文**:
+   ```python
+   from abc import ABC, abstractmethod
+   from typing import Generic, TypeVar
+
+   import torch
+   from jaxtyping import Float, Int64
+   from torch import Tensor
+
+   from ...misc.step_tracker import StepTracker
+   from ..types import Stage
+
+   T = TypeVar("T")
+   ```
+   - ABC（抽象基底クラス）と抽象メソッドをインポートしています。
+   - 型変数`T`を定義して、汎用的な型を扱えるようにしています。
+   - PyTorchおよび型ヒント用のライブラリをインポートしています。
+
+2. **`ViewSampler`クラス**:
+   ```python
+   class ViewSampler(ABC, Generic[T]):
+       cfg: T
+       stage: Stage
+       is_overfitting: bool
+       cameras_are_circular: bool
+       step_tracker: StepTracker | None
+   ```
+   - 抽象基底クラス`ViewSampler`を定義します。`Generic[T]`を使用して、任意の設定タイプを扱えるようにしています。
+   - 各サンプラーは、設定（`cfg`）、現在のステージ（`stage`）、オーバーフィットのフラグ（`is_overfitting`）、カメラが円形かどうかのフラグ（`cameras_are_circular`）、およびステップトラッカー（`step_tracker`）を持ちます。
+
+3. **コンストラクタ**:
+   ```python
+   def __init__(
+       self,
+       cfg: T,
+       stage: Stage,
+       is_overfitting: bool,
+       cameras_are_circular: bool,
+       step_tracker: StepTracker | None,
+   ) -> None:
+       self.cfg = cfg
+       self.stage = stage
+       self.is_overfitting = is_overfitting
+       self.cameras_are_circular = cameras_are_circular
+       self.step_tracker = step_tracker
+   ```
+   - 各プロパティを初期化するためのコンストラクタを定義しています。
+
+4. **抽象メソッド**:
+   ```python
+   @abstractmethod
+   def sample(
+       self,
+       scene: str,
+       extrinsics: Float[Tensor, "view 4 4"],
+       intrinsics: Float[Tensor, "view 3 3"],
+       device: torch.device = torch.device("cpu"),
+       **kwargs,
+   ) -> tuple[
+       Int64[Tensor, " context_view"],  # indices for context views
+       Int64[Tensor, " target_view"],  # indices for target views
+   ]:
+       pass
+   ```
+   - `sample`メソッドは、サブクラスで実装する必要があります。このメソッドは、シーン名、外部パラメータ（extrinsics）、内部パラメータ（intrinsics）を受け取り、コンテキストビューとターゲットビューのインデックスを返します。
+
+5. **プロパティ**:
+   ```python
+   @property
+   @abstractmethod
+   def num_target_views(self) -> int:
+       pass
+
+   @property
+   @abstractmethod
+   def num_context_views(self) -> int:
+       pass
+   ```
+   - `num_target_views`と`num_context_views`という抽象プロパティを定義しています。これらもサブクラスで実装する必要があります。
+
+6. **`global_step`プロパティ**:
+   ```python
+   @property
+   def global_step(self) -> int:
+       return 0 if self.step_tracker is None else self.step_tracker.get_step()
+   ```
+   - `global_step`プロパティは、現在のステップ数を返します。ステップトラッカーが存在しない場合は0を返します。
+
+### まとめ
+
+この`ViewSampler`クラスは、特定のサンプリング戦略を持つビューサンプラーを構築するための基盤を提供します。サブクラスはこのクラスを継承し、具体的なサンプリングロジックを実装することが求められます。この構造により、異なるサンプリング方法を統一的に扱うことが可能になります。

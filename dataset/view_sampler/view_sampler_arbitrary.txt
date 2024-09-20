@@ -1,0 +1,104 @@
+このコードは、任意の視点をサンプリングするための `ViewSamplerArbitrary` クラスを定義しています。以下に、主要な部分を詳しく説明します。
+
+### コードの構成
+
+1. **インポート文**:
+   ```python
+   from dataclasses import dataclass
+   from typing import Literal
+
+   import torch
+   from jaxtyping import Float, Int64
+   from torch import Tensor
+
+   from .view_sampler import ViewSampler
+   ```
+   - 必要なライブラリやモジュールをインポートしています。
+
+2. **`ViewSamplerArbitraryCfg`データクラス**:
+   ```python
+   @dataclass
+   class ViewSamplerArbitraryCfg:
+       name: Literal["arbitrary"]
+       num_context_views: int
+       num_target_views: int
+       context_views: list[int] | None
+       target_views: list[int] | None
+   ```
+   - サンプラーの設定を定義するデータクラスです。以下の属性を持ちます：
+     - `name`: このサンプラーの名前（固定で `"arbitrary"`）。
+     - `num_context_views`: サンプリングするコンテキストビューの数。
+     - `num_target_views`: サンプリングするターゲットビューの数。
+     - `context_views`: 任意のコンテキストビューのインデックス（指定しない場合はランダム）。
+     - `target_views`: 任意のターゲットビューのインデックス（指定しない場合はランダム）。
+
+3. **`ViewSamplerArbitrary`クラス**:
+   ```python
+   class ViewSamplerArbitrary(ViewSampler[ViewSamplerArbitraryCfg]):
+   ```
+   - `ViewSampler`のサブクラスで、任意の視点をサンプリングするための実装を提供します。
+
+4. **`sample`メソッド**:
+   ```python
+   def sample(
+       self,
+       scene: str,
+       extrinsics: Float[Tensor, "view 4 4"],
+       intrinsics: Float[Tensor, "view 3 3"],
+       device: torch.device = torch.device("cpu"),
+   ) -> tuple[
+       Int64[Tensor, " context_view"],  # indices for context views
+       Int64[Tensor, " target_view"],  # indices for target views
+   ]:
+       """Arbitrarily sample context and target views."""
+       num_views, _, _ = extrinsics.shape
+
+       index_context = torch.randint(
+           0,
+           num_views,
+           size=(self.cfg.num_context_views,),
+           device=device,
+       )
+
+       # Allow the context views to be fixed.
+       if self.cfg.context_views is not None:
+           assert len(self.cfg.context_views) == self.cfg.num_context_views
+           index_context = torch.tensor(
+               self.cfg.context_views, dtype=torch.int64, device=device
+           )
+
+       index_target = torch.randint(
+           0,
+           num_views,
+           size=(self.cfg.num_target_views,),
+           device=device,
+       )
+
+       # Allow the target views to be fixed.
+       if self.cfg.target_views is not None:
+           assert len(self.cfg.target_views) == self.cfg.num_target_views
+           index_target = torch.tensor(
+               self.cfg.target_views, dtype=torch.int64, device=device
+           )
+
+       return index_context, index_target
+   ```
+   - このメソッドは、指定されたコンテキストビューとターゲットビューのインデックスをサンプリングします。
+   - `extrinsics`の形状から視点数を取得し、ランダムなインデックスを生成します。
+   - `context_views`または`target_views`が指定されている場合、そのインデックスを使用します。
+
+5. **プロパティ**:
+   ```python
+   @property
+   def num_context_views(self) -> int:
+       return self.cfg.num_context_views
+
+   @property
+   def num_target_views(self) -> int:
+       return self.cfg.num_target_views
+   ```
+   - コンテキストビューとターゲットビューの数を返します。
+
+### まとめ
+
+`ViewSamplerArbitrary`は、柔軟に視点をサンプリングするためのクラスで、特定のインデックスを指定することも、ランダムに選ぶことも可能です。このクラスは、異なるシナリオに応じてコンテキストとターゲットのサンプリングをカスタマイズできるため、非常に便利です。
