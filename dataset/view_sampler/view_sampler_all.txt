@@ -1,0 +1,64 @@
+このコードは、全ての視点をサンプルするための `ViewSamplerAll` クラスを定義しています。以下に、各部分の詳細を説明します。
+
+### コードの構成
+
+1. **インポート文**:
+   ```python
+   from dataclasses import dataclass
+   from typing import Literal
+
+   import torch
+   from jaxtyping import Float, Int64
+   from torch import Tensor
+
+   from .view_sampler import ViewSampler
+   ```
+   - 必要なライブラリとモジュールをインポートしています。
+
+2. **`ViewSamplerAllCfg`データクラス**:
+   ```python
+   @dataclass
+   class ViewSamplerAllCfg:
+       name: Literal["all"]
+   ```
+   - ビューサンプラーの設定を表すデータクラスです。このクラスは単一の属性 `name` を持ち、常に `"all"` であることを示します。
+
+3. **`ViewSamplerAll`クラス**:
+   ```python
+   class ViewSamplerAll(ViewSampler[ViewSamplerAllCfg]):
+   ```
+   - `ViewSampler`のサブクラスで、全ての視点をサンプリングするためのクラスです。
+
+4. **`sample`メソッド**:
+   ```python
+   def sample(
+       self,
+       scene: str,
+       extrinsics: Float[Tensor, "view 4 4"],
+       intrinsics: Float[Tensor, "view 3 3"],
+       device: torch.device = torch.device("cpu"),
+   ) -> tuple[
+       Int64[Tensor, " context_view"],  # indices for context views
+       Int64[Tensor, " target_view"],  # indices for target views
+   ]:
+       v, _, _ = extrinsics.shape
+       all_frames = torch.arange(v, device=device)
+       return all_frames, all_frames
+   ```
+   - このメソッドは、全ての外部パラメータ（`extrinsics`）のインデックスを生成します。`extrinsics`の形状から視点数`v`を取得し、0から`v-1`までの全てのインデックスを返します。これは、コンテキストビューとターゲットビューのインデックスとして使用されます。
+
+5. **プロパティ**:
+   ```python
+   @property
+   def num_context_views(self) -> int:
+       return 0
+
+   @property
+   def num_target_views(self) -> int:
+       return 0
+   ```
+   - これらのプロパティは、コンテキストビューとターゲットビューの数を返しますが、全ての視点をサンプリングするため、0を返すようにしています。
+
+### まとめ
+
+`ViewSamplerAll`は、与えられた視点の全てをそのまま返すシンプルなサンプラーです。サンプリングの柔軟性が必要な場合に便利です。このクラスは、他のサンプラーと一緒に使用して、異なるサンプリング戦略を簡単に切り替えることができます。

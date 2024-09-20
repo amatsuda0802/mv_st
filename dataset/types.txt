@@ -1,0 +1,73 @@
+このコードは、PyTorch と関連ライブラリを使用したデータ処理に関する型定義を行っています。特に、データのバッチ処理と非バッチ処理に関する構造を明確にするための `TypedDict` を使っています。
+
+### コードの主要部分の解説
+
+1. **リテラルと型の定義**
+   ```python
+   from typing import Callable, Literal, TypedDict
+   from jaxtyping import Float, Int64
+   from torch import Tensor
+
+   Stage = Literal["train", "val", "test"]
+   ```
+   - `Stage` は訓練、検証、テストのいずれかを示すリテラル型です。
+
+2. **`BatchedViews` 型の定義**
+   ```python
+   class BatchedViews(TypedDict, total=False):
+       extrinsics: Float[Tensor, "batch _ 4 4"]  # batch view 4 4
+       intrinsics: Float[Tensor, "batch _ 3 3"]  # batch view 3 3
+       image: Float[Tensor, "batch _ _ _ _"]  # batch view channel height width
+       near: Float[Tensor, "batch _"]  # batch view
+       far: Float[Tensor, "batch _"]  # batch view
+       index: Int64[Tensor, "batch _"]  # batch view
+   ```
+   - `BatchedViews` は、バッチ処理されたビューに関するデータを表す辞書型です。
+   - 各キーは、画像データやカメラのパラメータなどを含みます。アンダースコア (`_`) の部分は、異なるサイズを許容することを示しています。
+
+3. **`BatchedExample` 型の定義**
+   ```python
+   class BatchedExample(TypedDict, total=False):
+       target: BatchedViews
+       context: BatchedViews
+       scene: list[str]
+   ```
+   - `BatchedExample` は、ターゲットとコンテキストのビュー、およびシーン情報を含む辞書型です。
+
+4. **`UnbatchedViews` 型の定義**
+   ```python
+   class UnbatchedViews(TypedDict, total=False):
+       extrinsics: Float[Tensor, "_ 4 4"]
+       intrinsics: Float[Tensor, "_ 3 3"]
+       image: Float[Tensor, "_ 3 height width"]
+       near: Float[Tensor, " _"]
+       far: Float[Tensor, " _"]
+       index: Int64[Tensor, " _"]
+   ```
+   - `UnbatchedViews` は、バッチ処理されていないビューに関するデータを表す辞書型です。こちらもアンダースコアが使用されており、可変サイズを示しています。
+
+5. **`UnbatchedExample` 型の定義**
+   ```python
+   class UnbatchedExample(TypedDict, total=False):
+       target: UnbatchedViews
+       context: UnbatchedViews
+       scene: str
+   ```
+   - `UnbatchedExample` は、バッチ処理されていないターゲットとコンテキストのビュー、およびシーン情報を含む辞書型です。
+
+6. **データシムの定義**
+   ```python
+   DataShim = Callable[[BatchedExample], BatchedExample]
+   ```
+   - `DataShim` は、データローダーから返された例を修正するための関数型です。バッチ処理された例を受け取り、修正された例を返します。
+
+7. **`AnyExample` と `AnyViews` 型の定義**
+   ```python
+   AnyExample = BatchedExample | UnbatchedExample
+   AnyViews = BatchedViews | UnbatchedViews
+   ```
+   - `AnyExample` は、バッチ処理された例または非バッチ処理された例のいずれかを示します。
+   - `AnyViews` は、バッチ処理されたビューまたは非バッチ処理されたビューのいずれかを示します。
+
+### まとめ
+このコードは、データのバッチ処理と非バッチ処理に関する型定義を提供し、データセットの管理やデータ処理において、より安全で効率的なプログラミングを可能にします。型ヒントを活用することで、IDE での補完やエラーチェックが向上し、開発体験が改善されます。

@@ -1,0 +1,51 @@
+このコードは、深度計算とデータのバウンディング処理に関連する機能を提供しています。特に、カメラの外部行列と内部行列に基づいて、視点の深度を計算し、適切な近くおよび遠くの平面を設定します。以下に、各関数の詳細を説明します。
+
+### コードの構成
+
+1. **インポート文**:
+   ```python
+   import torch
+   from einops import einsum, reduce, repeat
+   from jaxtyping import Float
+   from torch import Tensor
+
+   from ..types import BatchedExample
+   ```
+   - PyTorch、Einops、Jaxtypingを使用して、テンソルの計算や操作を行います。
+   - `BatchedExample`型をインポートして、バッチ処理されたデータの型を定義します。
+
+2. **`compute_depth_for_disparity`関数**:
+   ```python
+   def compute_depth_for_disparity(
+       extrinsics: Float[Tensor, "batch view 4 4"],
+       intrinsics: Float[Tensor, "batch view 3 3"],
+       image_shape: tuple[int, int],
+       disparity: float,
+       delta_min: float = 1e-6,
+   ) -> Float[Tensor, " batch"]:
+       # 関数の詳細...
+   ```
+   - **目的**: 指定された視差に基づいて、深度を計算します。
+   - **処理内容**:
+     - カメラの原点を抽出し、カメラ間の距離（`deltas`）を計算します。
+     - 最も遠いカメラ間の距離を基準（`baselines`）として設定します。
+     - 画像のピクセルサイズを深度1で計算し、平均ピクセルサイズを求めます。
+     - 視差と平均ピクセルサイズに基づいて深度を返します。
+
+3. **`apply_bounds_shim`関数**:
+   ```python
+   def apply_bounds_shim(
+       batch: BatchedExample,
+       near_disparity: float,
+       far_disparity: float,
+   ) -> BatchedExample:
+       # 関数の詳細...
+   ```
+   - **目的**: コンテキストビューに基づいて、近くおよび遠くの深度平面を計算します。
+   - **処理内容**:
+     - コンテキストビューの形状を取得し、近くの深度（`near`）と遠くの深度（`far`）を計算します。
+     - 計算された深度をターゲットとコンテキストの両方に適用し、バッチを返します。
+
+### まとめ
+
+このコードは、深度計算を行い、視点データに基づいて深度の近くおよび遠くの制約を設定することで、3D視点の処理を効率化します。具体的には、カメラの配置や視差を考慮しながら、データのバウンディングを行い、モデルが学習する際の参考となるように設計されています。

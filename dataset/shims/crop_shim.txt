@@ -1,0 +1,86 @@
+このコードは、画像データをリスケールおよびクロップ（切り抜き）するための一連の関数を提供しています。以下に、各関数の役割を説明します。
+
+### コードの構成
+
+1. **インポート文**:
+   ```python
+   import numpy as np
+   import torch
+   from einops import rearrange
+   from jaxtyping import Float
+   from PIL import Image
+   from torch import Tensor
+
+   from ..types import AnyExample, AnyViews
+   ```
+   - 必要なライブラリをインポートし、`AnyExample`や`AnyViews`の型を定義します。
+
+2. **`rescale`関数**:
+   ```python
+   def rescale(
+       image: Float[Tensor, "3 h_in w_in"],
+       shape: tuple[int, int],
+   ) -> Float[Tensor, "3 h_out w_out"]:
+       # 関数の詳細...
+   ```
+   - **目的**: 画像を指定されたサイズにリスケールします。
+   - **処理内容**:
+     - 画像を255倍して8ビットの整数型に変換。
+     - NumPyを使って画像をリスケールし、その後再びTensorに変換。
+     - チャンネルの次元を最後に移動させて返します。
+
+3. **`center_crop`関数**:
+   ```python
+   def center_crop(
+       images: Float[Tensor, "*#batch c h w"],
+       intrinsics: Float[Tensor, "*#batch 3 3"],
+       shape: tuple[int, int],
+   ) -> tuple[
+       Float[Tensor, "*#batch c h_out w_out"],
+       Float[Tensor, "*#batch 3 3"],
+   ]:
+       # 関数の詳細...
+   ```
+   - **目的**: 画像を中心からクロップし、内部行列を更新します。
+   - **処理内容**:
+     - クロップするための行と列を計算。
+     - 指定された形状に基づいて画像を切り抜き、内部行列を適切に調整して返します。
+
+4. **`rescale_and_crop`関数**:
+   ```python
+   def rescale_and_crop(
+       images: Float[Tensor, "*#batch c h w"],
+       intrinsics: Float[Tensor, "*#batch 3 3"],
+       shape: tuple[int, int],
+   ) -> tuple[
+       Float[Tensor, "*#batch c h_out w_out"],
+       Float[Tensor, "*#batch 3 3"],
+   ]:
+       # 関数の詳細...
+   ```
+   - **目的**: 画像をリスケールし、その後クロップします。
+   - **処理内容**:
+     - 入力画像のサイズを確認し、リスケールするためのスケールファクターを計算。
+     - 各画像をリスケールし、最後にクロップして結果を返します。
+
+5. **`apply_crop_shim_to_views`関数**:
+   ```python
+   def apply_crop_shim_to_views(views: AnyViews, shape: tuple[int, int]) -> AnyViews:
+       # 関数の詳細...
+   ```
+   - **目的**: 画像と内部行列をクロップするためのラッパーです。
+   - **処理内容**:
+     - `rescale_and_crop`関数を使用して、指定された形状に基づいて画像と内部行列を更新します。
+
+6. **`apply_crop_shim`関数**:
+   ```python
+   def apply_crop_shim(example: AnyExample, shape: tuple[int, int]) -> AnyExample:
+       # 関数の詳細...
+   ```
+   - **目的**: 入力例のすべてのビューに対してクロップ処理を適用します。
+   - **処理内容**:
+     - コンテキストとターゲットのビューに`apply_crop_shim_to_views`を適用し、更新された例を返します。
+
+### まとめ
+
+このコードは、画像をリスケールおよびクロップするための便利な関数を提供し、特に3D視点のデータ処理に役立ちます。これにより、モデルが異なるサイズの画像を扱えるようになります。リスケーリングとクロッピングを組み合わせることで、特定の入力形式にデータを適応させることができます。

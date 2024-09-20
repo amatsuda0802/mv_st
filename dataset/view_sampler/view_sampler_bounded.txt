@@ -1,0 +1,83 @@
+このコードは、制約のある視点をサンプリングするための `ViewSamplerBounded` クラスを定義しています。以下に、主要な部分を詳しく説明します。
+
+### コードの構成
+
+1. **インポート文**:
+   ```python
+   from dataclasses import dataclass
+   from typing import Literal
+
+   import torch
+   from jaxtyping import Float, Int64
+   from torch import Tensor
+
+   from .view_sampler import ViewSampler
+   ```
+   - 必要なライブラリやモジュールをインポートしています。
+
+2. **`ViewSamplerBoundedCfg`データクラス**:
+   ```python
+   @dataclass
+   class ViewSamplerBoundedCfg:
+       name: Literal["bounded"]
+       num_context_views: int
+       num_target_views: int
+       min_distance_between_context_views: int
+       max_distance_between_context_views: int
+       min_distance_to_context_views: int
+       warm_up_steps: int
+       initial_min_distance_between_context_views: int
+       initial_max_distance_between_context_views: int
+   ```
+   - サンプリングの設定を定義するデータクラスで、以下の属性を持ちます：
+     - `name`: サンプラーの名前（固定で `"bounded"`）。
+     - 各種の距離制約（最小、最大）やウォームアップステップの設定。
+
+3. **`ViewSamplerBounded`クラス**:
+   ```python
+   class ViewSamplerBounded(ViewSampler[ViewSamplerBoundedCfg]):
+   ```
+   - `ViewSampler`のサブクラスで、視点のサンプリングを制約付きで行います。
+
+4. **`schedule`メソッド**:
+   ```python
+   def schedule(self, initial: int, final: int) -> int:
+       fraction = self.global_step / self.cfg.warm_up_steps
+       return min(initial + int((final - initial) * fraction), final)
+   ```
+   - ウォームアップ期間中に距離のスケジュールを計算するメソッドです。グローバルステップに応じて、初期距離から最終距離までの間で線形補間を行います。
+
+5. **`sample`メソッド**:
+   ```python
+   def sample(
+       self,
+       scene: str,
+       extrinsics: Float[Tensor, "view 4 4"],
+       intrinsics: Float[Tensor, "view 3 3"],
+       device: torch.device = torch.device("cpu"),
+   ) -> tuple[
+       Int64[Tensor, " context_view"],  # indices for context views
+       Int64[Tensor, " target_view"],  # indices for target views
+   ]:
+   ```
+   - 指定されたコンテキストビューとターゲットビューのインデックスをサンプリングします。以下の手順を実行します：
+     - 現在のステージ（テスト、トレーニング、バリデーション）に応じて、コンテキストビューの距離を決定します。
+     - コンテキストビューの間隔（`context_gap`）をランダムに選びます。
+     - 左右のコンテキストインデックスを選択します。
+     - ターゲットビューのインデックスを選択します（テスト時はすべてのビューを選択、トレーニング時はランダムに選択）。
+
+6. **プロパティ**:
+   ```python
+   @property
+   def num_context_views(self) -> int:
+       return 2
+
+   @property
+   def num_target_views(self) -> int:
+       return self.cfg.num_target_views
+   ```
+   - コンテキストビューとターゲットビューの数を返します。
+
+### まとめ
+
+`ViewSamplerBounded`は、視点のサンプリングを制約付きで行うためのクラスで、距離制約を考慮しながら適切な視点を選択します。このクラスは、特定の条件下でのサンプリングを可能にし、データセットや実験の要件に応じて柔軟に調整できます。
