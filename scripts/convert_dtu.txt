@@ -1,0 +1,140 @@
+このコードは、DTUデータセットを処理し、指定されたディレクトリに評価用のデータを分割して保存するPythonスクリプトです。また、PyTorchを使って画像データやカメラ情報を扱い、データセットの各チャンクを保存します。以下に、コードの各セクションを解説します。
+
+### インポートセクション
+```python
+import subprocess
+from pathlib import Path
+from typing import Literal, TypedDict
+import numpy as np
+import torch
+from jaxtyping import Float, Int, UInt8
+from torch import Tensor
+import argparse
+from tqdm import tqdm
+import json
+import os
+```
+
+- `subprocess`: 外部プロセスを呼び出してファイルサイズを取得するために使用。
+- `Path`: パスを操作するためのユーティリティ。
+- `Literal`, `TypedDict`: 型チェックのためのヒント。
+- `numpy`: 数値計算ライブラリ。
+- `torch`: PyTorchライブラリ、テンソル操作用。
+- `jaxtyping`: 型チェックのためのユーティリティ（テンソルの形状やデータ型をチェック）。
+- `argparse`: コマンドライン引数の処理。
+- `tqdm`: プログレスバーの表示。
+
+### コマンドライン引数の設定
+```python
+parser = argparse.ArgumentParser()
+parser.add_argument("--input_dir", type=str, help="input dtu raw directory")
+parser.add_argument("--output_dir", type=str, help="output directory")
+args = parser.parse_args()
+
+INPUT_IMAGE_DIR = Path(args.input_dir)
+OUTPUT_DIR = Path(args.output_dir)
+```
+
+- コマンドライン引数を受け取って、`input_dir` と `output_dir` を設定。
+- `input_dir`: DTUデータセットの入力ディレクトリ。
+- `output_dir`: 出力ディレクトリ。
+
+### チャンクサイズの設定
+```python
+TARGET_BYTES_PER_CHUNK = int(1e8)
+```
+
+- チャンクサイズを100MBに設定。ファイルがこのサイズに達したら、新しいチャンクとして保存します。
+
+### カメラ情報の構築
+```python
+def build_camera_info(id_list, root_dir):
+    ...
+```
+
+- カメラの内部パラメータ、外部パラメータ、カメラ変換行列などを読み込み、各ビューの情報を辞書として保存します。
+- `intrinsic`: カメラの内部パラメータ（焦点距離、主点）。
+- `extrinsic`: カメラの外部パラメータ（カメラ座標系からワールド座標系への変換行列）。
+- `near_far`: カメラの近接・遠方クリッピング距離。
+
+### カメラファイルの読み込み
+```python
+def read_cam_file(filename):
+    ...
+```
+
+- カメラファイルから内部・外部パラメータおよび近接・遠方の情報を読み込みます。
+- `extrinsic`: 4x4行列でカメラの外部パラメータ。
+- `intrinsic`: 3x3行列でカメラの内部パラメータ。
+
+### データセットのキー取得
+```python
+def get_example_keys(stage: Literal["test", "train"]) -> list[str]:
+    ...
+```
+
+- `train` や `test` の段階に応じたスキャンIDを取得します。主にテストデータ用です。
+
+### ファイル・ディレクトリサイズの取得
+```python
+def get_size(path: Path) -> int:
+    ...
+```
+
+- ファイルまたはフォルダのサイズを取得する関数です。
+
+### RAW画像の読み込み
+```python
+def load_raw(path: Path) -> UInt8[Tensor, " length"]:
+    ...
+```
+
+- 指定されたパスからRAW形式の画像データを読み込み、`torch.Tensor` として返します。
+
+### 画像のロード
+```python
+def load_images(example_path: Path) -> dict[int, UInt8[Tensor, "..."]]:
+    ...
+```
+
+- 指定されたディレクトリ内のJPG画像をバイナリ形式で読み込みます。ここでは画像をデコードせずにそのまま保持します。
+
+### メタデータのロード
+```python
+def load_metadata(intrinsics, world2cams) -> Metadata:
+    ...
+```
+
+- カメラの内部・外部パラメータをもとに、カメラのメタデータを構築します。
+- `timestamps`: 各ビューのタイムスタンプ。
+- `cameras`: カメラパラメータ。
+
+### メインループ
+```python
+if __name__ == "__main__":
+    ...
+```
+
+- この部分では、指定された `stage` (ここでは "test") のデータを処理して、カメラ情報と画像データをチャンクに分けて保存します。
+- 各チャンクのサイズが `TARGET_BYTES_PER_CHUNK` に達したら保存し、新しいチャンクを作成します。
+
+### インデックスの作成
+```python
+        # generate index
+        print("Generate key:torch index...")
+        index = {}
+        stage_path = OUTPUT_DIR / stage
+        for chunk_path in tqdm(list(stage_path.iterdir()), desc=f"Indexing {stage_path.name}"):
+            if chunk_path.suffix == ".torch":
+                chunk = torch.load(chunk_path)
+                for example in chunk:
+                    index[example["key"]] = str(chunk_path.relative_to(stage_path))
+        with (stage_path / "index.json").open("w") as f:
+            json.dump(index, f)
+```
+
+- 各チャンク内のデータを参照するためのインデックスを作成し、`index.json` として保存します。これにより、後からデータを効率的に読み込むことが可能です。
+
+---
+
+このスクリプトは、DTUデータセットを前処理してPyTorchのテンソル形式に変換し、カメラのパラメータや画像データを効率よく保存・アクセスできる形式で扱うことを目的としています。
