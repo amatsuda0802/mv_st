@@ -1,0 +1,48 @@
+このコードでは、Pythonの標準ライブラリである `dataclasses` と `pathlib` を使って設定を管理するクラスが定義されています。以下、それぞれの部分を説明します。
+
+### 1. `dataclass` の使用
+`@dataclass` は Python のデコレータで、クラスを自動的に初期化メソッド（`__init__`）や、他の便利なメソッド（`__repr__`, `__eq__` など）を生成するものです。これにより、シンプルなデータ構造を簡単に定義できます。
+
+### 2. `MethodCfg` クラス
+```python
+@dataclass
+class MethodCfg:
+    name: str
+    key: str
+    path: Path
+```
+- **`MethodCfg` クラス**: ある「メソッド」に関する設定情報を保持します。
+- **`name: str`**: メソッドの名前を文字列として保存します。
+- **`key: str`**: メソッドに対応するキーや識別子を文字列として保存します。
+- **`path: Path`**: `pathlib.Path` 型のオブジェクトで、ファイルやディレクトリのパスを扱います。これは、メソッドに関連するファイルパスを保存するために使用されます。
+
+### 3. `SceneCfg` クラス
+```python
+@dataclass
+class SceneCfg:
+    scene: str
+    target_index: int
+```
+- **`SceneCfg` クラス**: シーンの設定を保持します。
+- **`scene: str`**: シーンの名前や識別子を文字列で保存します。
+- **`target_index: int`**: シーン内でのターゲットのインデックスを整数で保存します。このインデックスは何か特定の要素を指している可能性があります。
+
+### 4. `EvaluationCfg` クラス
+```python
+@dataclass
+class EvaluationCfg:
+    methods: list[MethodCfg]
+    side_by_side_path: Path | None
+    animate_side_by_side: bool
+    highlighted: list[SceneCfg]
+```
+- **`EvaluationCfg` クラス**: 評価に関連する設定を保持するクラスです。
+- **`methods: list[MethodCfg]`**: 複数の `MethodCfg` インスタンスをリストとして保持します。評価に使用される複数のメソッド設定を保存します。
+- **`side_by_side_path: Path | None`**: サイドバイサイドの表示に関連するパスを保存します。もし値が `None` の場合、サイドバイサイド表示は使用しないという意味でしょう。
+- **`animate_side_by_side: bool`**: サイドバイサイド表示をアニメーションするかどうかをブール値で管理します。`True` ならアニメーションを行い、`False` なら行いません。
+- **`highlighted: list[SceneCfg]`**: ハイライトするシーンのリストを `SceneCfg` 型のリストとして保持します。評価中に特に注目すべきシーンを指定するための設定です。
+
+### 全体的な動作
+このコードは、評価設定を表現するための3つのデータクラス (`MethodCfg`, `SceneCfg`, `EvaluationCfg`) を定義しており、それぞれの設定に必要な情報を保持します。この設計により、柔軟に評価設定を管理できるようになっています。
+
+もしこのコードの具体的な使い方や補足の説明が必要でしたら、お知らせください。
