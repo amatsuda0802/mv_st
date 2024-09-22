@@ -1,0 +1,105 @@
+このコードは、関数やプロセスの実行時間を測定するための `Benchmarker` クラスを実装しています。このクラスは、コードのパフォーマンスを評価し、結果を保存・表示するために使用されます。以下に、コードの各部分を詳しく解説します。
+
+### インポート部分
+```python
+import json
+from collections import defaultdict
+from contextlib import contextmanager
+from pathlib import Path
+from time import time
+
+import numpy as np
+import torch
+```
+- **json**: JSON形式でデータを読み書きするための標準ライブラリ。
+- **defaultdict**: キーが存在しない場合にデフォルト値を返す辞書。
+- **contextmanager**: コンテキストマネージャを定義するためのデコレーター。
+- **Path**: `pathlib`からのクラスで、ファイルシステムパスを扱うために使用。
+- **time**: 時間を測定するための関数。
+- **numpy**: 数値計算ライブラリ。
+- **torch**: PyTorchライブラリ。
+
+### `Benchmarker` クラス
+```python
+class Benchmarker:
+    def __init__(self):
+        self.execution_times = defaultdict(list)
+```
+- **コンストラクタ**: `execution_times` 辞書を初期化します。この辞書は、タグごとに実行時間をリストとして保存します。
+
+#### `time` メソッド
+```python
+@contextmanager
+def time(self, tag: str, num_calls: int = 1):
+    try:
+        start_time = time()
+        yield
+    finally:
+        end_time = time()
+        for _ in range(num_calls):
+            self.execution_times[tag].append((end_time - start_time) / num_calls)
+```
+- **引数**:
+  - `tag`: 測定対象のタグ（関数名や処理の説明など）。
+  - `num_calls`: 測定する回数（デフォルトは1）。
+- **コンテキストマネージャ**: `with` ステートメントを使用して、測定対象のコードを実行します。終了時に経過時間を計算し、指定されたタグで `execution_times` に記録します。
+
+#### `dump` メソッド
+```python
+def dump(self, path: Path) -> None:
+    path.parent.mkdir(exist_ok=True, parents=True)
+    with path.open("w") as f:
+        json.dump(dict(self.execution_times), f)
+```
+- **引数**: `path`: 結果を保存するファイルのパス。
+- **動作**: 実行時間の記録をJSON形式でファイルに書き出します。必要に応じて親ディレクトリを作成します。
+
+#### `dump_memory` メソッド
+```python
+def dump_memory(self, path: Path) -> None:
+    path.parent.mkdir(exist_ok=True, parents=True)
+    with path.open("w") as f:
+        json.dump(torch.cuda.memory_stats()["allocated_bytes.all.peak"], f)
+```
+- **動作**: PyTorchのCUDAメモリ統計を取得し、ピークメモリ使用量をJSON形式でファイルに保存します。
+
+#### `summarize` メソッド
+```python
+def summarize(self) -> None:
+    for tag, times in self.execution_times.items():
+        print(f"{tag}: {len(times)} calls, avg. {np.mean(times)} seconds per call")
+```
+- **動作**: 各タグに対する実行時間の呼び出し回数と平均実行時間を表示します。
+
+#### `clear_history` メソッド
+```python
+def clear_history(self) -> None:
+    self.execution_times = defaultdict(list)
+```
+- **動作**: 実行時間の履歴をクリアし、空の `defaultdict` を再初期化します。
+
+### 全体の動作
+`Benchmarker` クラスは、パフォーマンスの測定やメモリ使用状況の記録に便利です。特に、コンテキストマネージャを使用することで、測定対象のコードの実行時間を簡単に計測できます。計測結果はファイルに保存でき、後で分析することも可能です。
+
+### 使い方の例
+以下のようにして使用することができます。
+
+```python
+benchmarker = Benchmarker()
+
+# ある関数の実行時間を測定
+with benchmarker.time("my_function", num_calls=10):
+    # my_functionの処理
+    pass
+
+# 結果を表示
+benchmarker.summarize()
+
+# 結果をファイルに保存
+benchmarker.dump(Path("output/benchmark_results.json"))
+
+# メモリ使用量を保存
+benchmarker.dump_memory(Path("output/memory_usage.json"))
+```
+
+このようにして、処理のパフォーマンスを効果的に測定・記録することができます。

@@ -1,0 +1,64 @@
+このコードは、入れ子になった辞書構造（ツリー状のデータ構造）を持つテンソルのリストを、指定されたマージ関数を使ってマージする `collate` 関数を実装しています。以下に、各部分を詳しく解説します。
+
+### インポート部分
+```python
+from typing import Callable, Dict, Union
+from torch import Tensor
+```
+- **Callable**: 関数型のヒントを表します。
+- **Dict**: 辞書型を表します。
+- **Union**: 複数の型のいずれかであることを示します。
+- **Tensor**: PyTorchのテンソル型を表します。
+
+### 型エイリアス
+```python
+Tree = Union[Dict[str, "Tree"], Tensor]
+```
+- **Tree**: ツリー状のデータ構造を表す型エイリアスです。これは、辞書のキーが文字列で、値がさらに別の辞書（またはテンソル）である構造を持ちます。
+
+### `collate` 関数
+```python
+def collate(trees: list[Tree], merge_fn: Callable[[list[Tensor]], Tensor]) -> Tree:
+    """Merge nested dictionaries of tensors."""
+```
+- **引数**:
+  - `trees`: マージ対象のツリー状のデータ構造を持つテンソルのリスト。
+  - `merge_fn`: 複数のテンソルをマージするための関数。
+
+#### 処理内容
+1. **テンソルの場合の処理**:
+    ```python
+    if isinstance(trees[0], Tensor):
+        return merge_fn(trees)
+    ```
+    - 最初の要素がテンソルの場合、指定されたマージ関数 `merge_fn` を呼び出し、リストのテンソルをマージして結果を返します。
+
+2. **辞書の場合の処理**:
+    ```python
+    else:
+        return {
+            key: collate([tree[key] for tree in trees], merge_fn) for key in trees[0]
+        }
+    ```
+    - 最初の要素が辞書の場合、各キーに対して再帰的に `collate` 関数を呼び出します。すべての辞書から同じキーを持つ値を集め、その値を `merge_fn` でマージします。
+
+### 全体の動作
+この `collate` 関数は、ツリー状のデータ構造を持つテンソルのリストを効率的にマージします。ネストされた辞書を持つ場合も対応しており、再帰的に処理を行うことで、複雑なデータ構造を扱えます。
+
+### 使い方の例
+以下のようにして使用することができます。
+
+```python
+def my_merge_fn(tensors: list[Tensor]) -> Tensor:
+    return sum(tensors)  # 例: テンソルの合計を返す
+
+trees = [
+    {"a": torch.tensor([1]), "b": torch.tensor([2])},
+    {"a": torch.tensor([3]), "b": torch.tensor([4])}
+]
+
+result = collate(trees, my_merge_fn)
+print(result)  # {'a': tensor([4]), 'b': tensor([6])}
+```
+
+この例では、辞書内のテンソルを合計する `my_merge_fn` を使って、複数のツリーをマージしています。最終的な結果は、各キーに対するテンソルの合計になります。
