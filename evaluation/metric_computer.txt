@@ -1,0 +1,160 @@
+このコードは、PyTorch Lightning を使用して、画像に対する評価指標（PSNR、LPIPS、SSIM）を計算する `MetricComputer` クラスを定義しています。さらに、評価結果をサイドバイサイドで表示する画像や動画として保存する機能も持っています。それぞれの部分を詳しく解説します。
+
+### 1. インポート部分
+```python
+import os
+from pathlib import Path
+
+import torch
+from pytorch_lightning import LightningModule
+from tabulate import tabulate
+
+from ..misc.image_io import load_image, save_image
+from ..visualization.annotation import add_label
+from ..visualization.layout import add_border, hcat
+from .evaluation_cfg import EvaluationCfg
+from .metrics import compute_lpips, compute_psnr, compute_ssim
+```
+- **必要なライブラリやモジュールのインポート**: 
+  - `os` や `pathlib.Path`: ファイルやディレクトリ操作のために使用。
+  - `torch`: PyTorch を使用してテンソル操作を行います。
+  - `LightningModule`: PyTorch Lightning のベースクラスで、訓練やテストステップの定義に使用します。
+  - `tabulate`: テーブルの形式でデータを表示するためのライブラリ。
+  - `load_image`, `save_image`: 画像の読み込み・保存機能を提供。
+  - `add_label`, `add_border`, `hcat`: 画像にラベルを追加したり、画像を並べたり、境界線を追加するためのユーティリティ。
+  - `compute_lpips`, `compute_psnr`, `compute_ssim`: それぞれ LPIPS, PSNR, SSIM の指標を計算する関数。
+
+### 2. クラス定義: `MetricComputer`
+```python
+class MetricComputer(LightningModule):
+    cfg: EvaluationCfg
+
+    def __init__(self, cfg: EvaluationCfg) -> None:
+        super().__init__()
+        self.cfg = cfg
+```
+- **`MetricComputer` クラス**: PyTorch Lightning の `LightningModule` を継承したクラスで、主にテストステップで画像に対する評価を行います。
+- **`__init__`**: `cfg`（評価設定）を引数として受け取り、それをクラス内に保持します。
+
+### 3. テストステップ (`test_step`)
+```python
+def test_step(self, batch, batch_idx):
+    scene = batch["scene"][0]
+    b, cv, _, _, _ = batch["context"]["image"].shape
+    assert b == 1 and cv == 2
+    _, v, _, _, _ = batch["target"]["image"].shape
+```
+- **`test_step`**: PyTorch Lightning のメソッドで、各バッチに対してテスト処理を行います。ここでは、各シーンごとに画像評価を行います。
+  - `scene`: シーンの名前を取得。
+  - `batch`: バッチ内の画像データ。
+  - `assert b == 1 and cv == 2`: コンテキスト画像のバッチサイズとコンテキストビュー数が想定通りかどうか確認。
+
+#### シーンのスキップ
+```python
+for method in self.cfg.methods:
+    if not (method.path / scene).exists():
+        print(f'Skipping "{scene}".')
+        return
+```
+- メソッドごとにシーンのパスが存在するか確認し、存在しない場合はそのシーンをスキップします。
+
+#### 画像の読み込み
+```python
+all_images = {}
+try:
+    for method in self.cfg.methods:
+        images = [
+            load_image(method.path / scene / f"color/{index.item():0>6}.png")
+            for index in batch["target"]["index"][0]
+        ]
+        all_images[method.key] = torch.stack(images).to(self.device)
+except FileNotFoundError:
+    print(f'Skipping "{scene}".')
+    return
+```
+- 各メソッドに対して、指定されたインデックスのターゲット画像を読み込みます。読み込んだ画像は `torch.stack` でテンソルに変換し、`all_images` に保存します。
+
+#### 評価指標の計算
+```python
+all_metrics = {}
+rgb_gt = batch["target"]["image"][0]
+for key, images in all_images.items():
+    all_metrics = {
+        **all_metrics,
+        f"lpips_{key}": compute_lpips(rgb_gt, images).mean(),
+        f"ssim_{key}": compute_ssim(rgb_gt, images).mean(),
+        f"psnr_{key}": compute_psnr(rgb_gt, images).mean(),
+    }
+self.log_dict(all_metrics)
+self.print_preview_metrics(all_metrics)
+```
+- 各メソッドごとに、ターゲット画像 (`rgb_gt`) と読み込んだ画像との間で、LPIPS, SSIM, PSNR の評価指標を計算します。`mean()` を取ってバッチ全体の平均を計算します。
+
+#### サイドバイサイド画像の作成
+```python
+if self.cfg.side_by_side_path is None:
+    return
+
+scene_key = f"{batch_idx:0>6}_{scene}"
+for i in range(v):
+    true_index = batch["target"]["index"][0, i]
+    row = [add_label(batch["target"]["image"][0, i], "Ground Truth")]
+    for method in self.cfg.methods:
+        image = all_images[method.key][i]
+        image = add_label(image, method.name)
+        row.append(image)
+    start_frame = batch["target"]["index"][0, 0]
+    end_frame = batch["target"]["index"][0, -1]
+    label = f"Scene {batch['scene'][0]} (frames {start_frame} to {end_frame})"
+    row = add_border(add_label(hcat(*row), label, font_size=16))
+    save_image(
+        row,
+        self.cfg.side_by_side_path / scene_key / f"{true_index:0>6}.png",
+    )
+```
+- ターゲット画像と評価された画像を並べて、サイドバイサイドの画像を生成します。`add_label` でラベルを付け、`add_border` で境界線を追加しています。
+
+#### アニメーションの作成
+```python
+if self.cfg.animate_side_by_side:
+    (self.cfg.side_by_side_path / "videos").mkdir(exist_ok=True, parents=True)
+    command = (
+        'ffmpeg -y -framerate 30 -pattern_type glob -i "*.png"  -c:v libx264 '
+        '-pix_fmt yuv420p -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2"'
+    )
+    os.system(
+        f"cd {self.cfg.side_by_side_path / scene_key} && {command} "
+        f"{Path.cwd()}/{self.cfg.side_by_side_path}/videos/{scene_key}.mp4"
+    )
+```
+- `ffmpeg` を使って、生成されたサイドバイサイド画像からアニメーション動画を作成します。30フレーム/秒でMP4動画を生成しています。
+
+### 4. メトリクスの表示 (`print_preview_metrics`)
+```python
+def print_preview_metrics(self, metrics: dict[str, float]) -> None:
+    if getattr(self, "running_metrics", None) is None:
+        self.running_metrics = metrics
+        self.running_metric_steps = 1
+    else:
+        s = self.running_metric_steps
+        self.running_metrics = {
+            k: ((s * v) + metrics[k]) / (s + 1)
+            for k, v in self.running_metrics.items()
+        }
+        self.running_metric_steps += 1
+
+    table = []
+    for method in self.cfg.methods:
+        row = [
+            f"{self.running_metrics[f'{metric}_{method.key}']:.3f}"
+            for metric in ("psnr", "lpips", "ssim")
+        ]
+        table.append((method.key, *row))
+
+    table = tabulate(table, ["Method", "PSNR (dB)", "LPIPS", "SSIM"])
+    print(table)
+```
+- 評価指標の平均値を計算して、`tabulate` ライブラリを使って表形式で表示します。
+
+### 結論
+この `MetricComputer` クラスは、PyTorch Lightning を用いて画像の評価を行い、結果を保存・表示するためのもので、計算された評価指標を表形式で出力するほか、画像やアニメーションとして結果を保存します。

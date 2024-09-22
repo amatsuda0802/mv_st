@@ -1,0 +1,83 @@
+このコードは、カメラのパンやフレームのオーバーラップに関連する処理を行い、シーンの評価やインデックスを保存する機能を持っています。主に2つのメソッドが定義されていますが、それぞれの動作を詳しく解説します。
+
+### 1. カメラのパンとターゲットビューの選択
+```python
+if overlap < min_overlap or delta > max_distance:
+    break
+```
+- **`overlap < min_overlap`** と **`delta > max_distance`** の条件が満たされるとループを終了します。これは、カメラが移動しすぎた（パンした）場合や、オーバーラップが少なすぎる場合に評価を中断するための処理です。
+
+```python
+current_index += step
+```
+- 現在のフレームインデックスを更新し、次のフレームに進めています。
+
+#### 有効なビューの選択
+```python
+if valid_indices:
+    num_options = len(valid_indices)
+    chosen = torch.randint(0, num_options, size=tuple(), generator=self.generator)
+    chosen, overlap_a, overlap_b = valid_indices[chosen]
+```
+- **`valid_indices`** が存在する場合、有効なインデックスからランダムにビューを選択します。`torch.randint` を使い、ランダムなインデックスを生成します。`overlap_a` と `overlap_b` は選択したビューのオーバーラップ率です。
+
+#### コンテキストの設定
+```python
+context_left = min(chosen, context_index.item())
+context_right = max(chosen, context_index.item())
+delta = context_right - context_left
+```
+- 左右のコンテキストビューの範囲を決定し、それらの距離（`delta`）を計算します。
+
+#### ターゲットビューの選択
+```python
+while True:
+    target_views = torch.randint(
+        context_left,
+        context_right + 1,
+        (self.cfg.num_target_views,),
+        generator=self.generator,
+    )
+    if (target_views.unique(return_counts=True)[1] == 1).all():
+        break
+```
+- ターゲットビューをランダムに選択します。`target_views` の各要素が一意であるかどうかを確認し、重複がない場合にループを終了します。
+
+```python
+target = tuple(sorted(target_views.tolist()))
+self.index[scene] = IndexEntry(
+    context=(context_left, context_right),
+    target=target,
+)
+```
+- 選択されたターゲットビューをソートし、それをインデックスとして登録します。
+
+#### プレビューの保存
+```python
+if self.cfg.save_previews:
+    preview_path = self.cfg.output_path / "previews"
+    preview_path.mkdir(exist_ok=True, parents=True)
+    a = batch["target"]["image"][0, chosen]
+    a = add_label(a, f"Overlap: {overlap_a * 100:.1f}%")
+    b = batch["target"]["image"][0, context_index]
+    b = add_label(b, f"Overlap: {overlap_b * 100:.1f}%")
+    vis = add_border(add_border(hcat(a, b)), 1, 0)
+    vis = add_label(vis, f"Distance: {delta} frames")
+    save_image(add_border(vis), preview_path / f"{scene}.png")
+```
+- プレビュー画像を保存するためのコードです。`add_label` 関数で画像にオーバーラップやフレーム距離の情報を追加し、`save_image` で画像を保存します。
+
+### 2. `save_index` メソッド
+```python
+def save_index(self) -> None:
+    self.cfg.output_path.mkdir(exist_ok=True, parents=True)
+    with (self.cfg.output_path / "evaluation_index.json").open("w") as f:
+        json.dump(
+            {k: None if v is None else asdict(v) for k, v in self.index.items()}, f
+        )
+```
+- 評価インデックスをJSON形式で保存するメソッドです。`self.index` の内容をシリアライズして `evaluation_index.json` に保存します。
+- `asdict` 関数を使って、`IndexEntry` オブジェクトを辞書に変換し、JSONファイルに書き込んでいます。
+
+### 結論
+このコードは、フレームのオーバーラップや距離を考慮してランダムにビューを選び、その選択結果をインデックスとして保存します。また、視覚的なプレビューを保存するオプションも提供しており、結果を後で確認できるようにしています。

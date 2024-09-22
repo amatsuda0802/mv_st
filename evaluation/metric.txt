@@ -1,0 +1,92 @@
+このコードは、PyTorch を使って、画像の品質を評価するための3つの指標（PSNR、LPIPS、SSIM）を計算するための関数を提供しています。それぞれの関数と関連する部分について解説します。
+
+### 1. `compute_psnr` 関数
+```python
+@torch.no_grad()
+def compute_psnr(
+    ground_truth: Float[Tensor, "batch channel height width"],
+    predicted: Float[Tensor, "batch channel height width"],
+) -> Float[Tensor, " batch"]:
+    ground_truth = ground_truth.clip(min=0, max=1)
+    predicted = predicted.clip(min=0, max=1)
+    mse = reduce((ground_truth - predicted) ** 2, "b c h w -> b", "mean")
+    return -10 * mse.log10()
+```
+
+- **PSNR (Peak Signal-to-Noise Ratio)** を計算する関数です。
+- `@torch.no_grad()`: この関数では勾配を計算しないようにしており、推論専用の関数です。
+- **入力**: 
+  - `ground_truth` と `predicted`: それぞれ元の画像と予測された画像をテンソルとして受け取ります。
+  - サイズは `batch channel height width` という形で、複数の画像をバッチ処理することを想定しています。
+- **処理**:
+  - 画像のピクセル値を `clip(min=0, max=1)` で 0 から 1 の範囲に正規化しています。
+  - 予測画像と元画像の差の二乗誤差（MSE）を計算し、その平均値をバッチ毎に計算。
+  - `log10` を使って PSNR を計算しています。PSNR は、MSE が小さいほど高い値になります。
+- **出力**: 各バッチごとの PSNR 値。
+
+### 2. `get_lpips` 関数
+```python
+@cache
+def get_lpips(device: torch.device) -> LPIPS:
+    return LPIPS(net="vgg").to(device)
+```
+
+- **LPIPS (Learned Perceptual Image Patch Similarity)** を計算するためのモデルを取得する関数です。
+- `@cache`: 一度計算された結果をキャッシュして、次回以降同じデバイスで呼び出されたときに再計算を避けるためのデコレータです。
+- **LPIPS モデル**: `vgg` ベースの LPIPS ネットワークを取得し、指定されたデバイス（CPUやGPU）上に転送します。
+
+### 3. `compute_lpips` 関数
+```python
+@torch.no_grad()
+def compute_lpips(
+    ground_truth: Float[Tensor, "batch channel height width"],
+    predicted: Float[Tensor, "batch channel height width"],
+) -> Float[Tensor, " batch"]:
+    value = get_lpips(predicted.device).forward(ground_truth, predicted, normalize=True)
+    return value[:, 0, 0, 0]
+```
+
+- **LPIPS** を計算する関数です。
+- **処理**:
+  - まず `get_lpips` 関数を使って LPIPS モデルを取得し、指定されたデバイス上で実行します。
+  - `ground_truth` と `predicted` をモデルに通して、2つの画像間の視覚的な類似度を測定します。
+  - 結果は通常 4次元のテンソルで返されるので、そのうち特定の次元を抽出して返しています。
+- **LPIPS の特徴**: LPIPS は視覚的な品質を人間の知覚に近い形で評価する指標で、主に畳み込みニューラルネットワーク（VGGなど）を使って特徴量を抽出し、それらの距離を計算します。
+
+### 4. `compute_ssim` 関数
+```python
+@torch.no_grad()
+def compute_ssim(
+    ground_truth: Float[Tensor, "batch channel height width"],
+    predicted: Float[Tensor, "batch channel height width"],
+) -> Float[Tensor, " batch"]:
+    ssim = [
+        structural_similarity(
+            gt.detach().cpu().numpy(),
+            hat.detach().cpu().numpy(),
+            win_size=11,
+            gaussian_weights=True,
+            channel_axis=0,
+            data_range=1.0,
+        )
+        for gt, hat in zip(ground_truth, predicted)
+    ]
+    return torch.tensor(ssim, dtype=predicted.dtype, device=predicted.device)
+```
+
+- **SSIM (Structural Similarity Index)** を計算する関数です。
+- **処理**:
+  - 各バッチに対して `ground_truth` と `predicted` のペアを処理し、`structural_similarity` 関数を使って SSIM を計算します。
+  - ここで、`structural_similarity` 関数は NumPy 配列として入力を要求するため、PyTorch テンソルを `.detach().cpu().numpy()` に変換しています。
+  - 計算した SSIM スコアを再び PyTorch テンソルに変換し、デバイスに戻します。
+- **SSIM の特徴**: SSIM は画像の局所的なコントラストや構造の違いを評価し、元画像と予測画像の類似性を 0 から 1 の範囲で測定します。
+
+---
+
+### 結論
+
+このコードは、画像の品質評価を行うための3つの主要な指標（PSNR、LPIPS、SSIM）を計算するための関数を実装しています。これらは、それぞれ異なる観点から画像の類似性を評価し、主に生成された画像の品質評価に使用されます。
+
+- **PSNR**: 画像のピクセルごとの差をベースにした評価指標。MSE に基づく。
+- **LPIPS**: 視覚的な類似性を人間の知覚に近い形で評価する指標。
+- **SSIM**: 画像の構造的な類似性を評価する指標。
