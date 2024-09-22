@@ -1,0 +1,100 @@
+このコードは、PyTorch Lightningを使用したローカルロギングのためのカスタムロガークラス `LocalLogger` を実装しています。このクラスは、学習中に生成された画像を指定したディレクトリに保存する機能を提供します。以下に、コードの各部分を詳しく解説します。
+
+### インポート部分
+```python
+import os
+from pathlib import Path
+from typing import Any, Optional
+
+from PIL import Image
+from pytorch_lightning.loggers.logger import Logger
+from pytorch_lightning.utilities import rank_zero_only
+```
+- **os**: オペレーティングシステムとのインターフェースを提供するライブラリです。
+- **Path**: `pathlib`からのクラスで、ファイルシステムパスを扱います。
+- **Any, Optional**: 型ヒントのための型です。
+- **Image**: Pillowライブラリのクラスで、画像の操作を行います。
+- **Logger**: PyTorch Lightningのロガークラスをインポートします。
+- **rank_zero_only**: 分散学習において、ランク0のプロセスだけで実行するデコレーターです。
+
+### 定数
+```python
+LOG_PATH = Path("outputs/local")
+```
+- ログデータを保存するディレクトリのパスを定義しています。
+
+### `LocalLogger` クラス
+```python
+class LocalLogger(Logger):
+    def __init__(self) -> None:
+        super().__init__()
+        self.experiment = None
+        os.system(f"rm -r {LOG_PATH}")
+```
+- **コンストラクタ**: スーパークラスを初期化し、`experiment` を `None` に設定します。また、`LOG_PATH` で指定されたディレクトリを削除します（存在する場合）。
+
+#### プロパティ
+```python
+@property
+def name(self):
+    return "LocalLogger"
+```
+- ロガーの名前を返します。
+
+```python
+@property
+def version(self):
+    return 0
+```
+- ロガーのバージョンを返します。
+
+#### メソッド
+```python
+@rank_zero_only
+def log_hyperparams(self, params):
+    pass
+```
+- ハイパーパラメータのロギングメソッドですが、実装は省略されています。
+
+```python
+@rank_zero_only
+def log_metrics(self, metrics, step):
+    pass
+```
+- メトリクスをロギングするメソッドですが、実装は省略されています。
+
+```python
+@rank_zero_only
+def log_image(
+    self,
+    key: str,
+    images: list[Any],
+    step: Optional[int] = None,
+    **kwargs,
+):
+    assert step is not None
+    for index, image in enumerate(images):
+        path = LOG_PATH / f"{key}/{index:0>2}_{step:0>6}.png"
+        path.parent.mkdir(exist_ok=True, parents=True)
+        Image.fromarray(image).save(path)
+```
+- **`log_image` メソッド**: 
+  - 画像を指定されたディレクトリに保存します。
+  - `key`: 保存する画像の識別子。
+  - `images`: 保存する画像のリスト。
+  - `step`: 画像を保存するステップ（必須）。
+  - 各画像に対して、適切なパスを生成し、ディレクトリが存在しない場合は作成します。画像をPNG形式で保存します。
+
+### 全体の動作
+この `LocalLogger` クラスは、PyTorch Lightningのトレーニングループに組み込むことで、学習中に生成された画像をローカルに保存するための便利な方法を提供します。特に、`log_image` メソッドを使用することで、各トレーニングステップにおける画像の状態を記録できます。
+
+### 使い方の例
+このロガーは、PyTorch Lightningのトレーニングループ内で利用することが想定されています。たとえば、次のように使用できます。
+
+```python
+logger = LocalLogger()
+trainer = pl.Trainer(logger=logger)
+trainer.fit(model, train_dataloader)
+```
+
+トレーニング中に、`log_image` メソッドを呼び出すことで、指定した画像を保存することができます。

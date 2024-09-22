@@ -1,0 +1,73 @@
+このコードは、マルチプロセッシング環境でのステップカウンタを管理するための`StepTracker`クラスを実装しています。以下に、各部分の詳細な解説をします。
+
+### 概要
+- **目的**: マルチプロセス間で共有されるステップのカウンタを安全に更新・取得する。
+- **使用するライブラリ**: 
+  - `torch`: テンソル計算とCUDA操作のため。
+  - `multiprocessing`: マルチプロセッシング環境でのロック管理。
+
+### 詳細な解説
+
+#### 1. インポート部分
+```python
+from multiprocessing import RLock
+import torch
+from jaxtyping import Int64
+from torch import Tensor
+from torch.multiprocessing import Manager
+```
+- `RLock`: 再帰的なロックを提供し、同じスレッドから複数回ロックを取得できるようにする。
+- `torch`: テンソルを扱うためのライブラリ。
+- `Int64`: 整数型のテンソルを定義するための型。
+- `Manager`: マルチプロセスでオブジェクトを管理するためのクラス。
+
+#### 2. `StepTracker`クラス
+```python
+class StepTracker:
+    lock: RLock
+    step: Int64[Tensor, ""]
+```
+- `lock`: マルチプロセス間での安全な操作を保証するロック。
+- `step`: ステップを表す共有メモリのテンソル。
+
+#### 3. コンストラクタ
+```python
+def __init__(self):
+    self.lock = Manager().RLock()
+    self.step = torch.tensor(0, dtype=torch.int64).share_memory_()
+```
+- `Manager().RLock()`: 新しい再帰ロックを作成。
+- `torch.tensor(0, dtype=torch.int64).share_memory_()`: 初期値0の整数テンソルを作成し、共有メモリとして設定。
+
+#### 4. ステップの設定
+```python
+def set_step(self, step: int) -> None:
+    with self.lock:
+        self.step.fill_(step)
+```
+- `set_step`メソッドは、引数で受け取った整数値で`step`テンソルを更新します。
+- `with self.lock:`: ロックを取得し、安全に`step`を更新。
+
+#### 5. ステップの取得
+```python
+def get_step(self) -> int:
+    with self.lock:
+        return self.step.item()
+```
+- `get_step`メソッドは、現在の`step`の値を取得します。
+- 同様にロックを取得して安全に操作します。
+
+### 使用方法
+このクラスを使用することで、複数のプロセスが同時にステップの更新や取得を行っても、データの競合を避けることができます。
+
+#### 例:
+```python
+tracker = StepTracker()
+tracker.set_step(5)
+current_step = tracker.get_step()
+print(current_step)  # 出力: 5
+```
+
+### 注意点
+- マルチプロセス環境でのみ有効であり、単一スレッドや非同期環境ではロックの必要がない場合があります。
+- `share_memory_()`は、PyTorchの共有メモリを使用するためのメソッドであり、マルチプロセスでのデータの整合性を保つために使用されます。

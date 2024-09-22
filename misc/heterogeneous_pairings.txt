@@ -1,0 +1,118 @@
+このコードは、自己ペアを除く全てのペアのインデックスを生成するための2つの関数を定義しています。具体的には、`generate_heterogeneous_index` と `generate_heterogeneous_index_transpose` の2つの関数です。それぞれの関数の目的と処理を詳しく見ていきましょう。
+
+### インポート部分
+```python
+import torch
+from einops import repeat
+from jaxtyping import Int
+from torch import Tensor
+```
+- **torch**: PyTorchライブラリ。
+- **einops**: テンソル操作を簡潔に行うためのライブラリ。
+- **jaxtyping**: JAXと互換性のある型ヒントを提供するライブラリ。
+- **Tensor**: PyTorchのテンソル型を表します。
+
+### 型エイリアス
+```python
+Index = Int[Tensor, "n n-1"]
+```
+- **Index**: 形状が `(n, n-1)` の整数型テンソルを表す型エイリアスです。このテンソルは、自己ペアを除いた全てのペアを表します。
+
+### `generate_heterogeneous_index` 関数
+```python
+def generate_heterogeneous_index(
+    n: int,
+    device: torch.device = torch.device("cpu"),
+) -> tuple[Index, Index]:
+    """Generate indices for all pairs except self-pairs."""
+```
+- **引数**:
+  - `n`: インデックスのサイズ（アイテムの数）。
+  - `device`: テンソルを生成するデバイス（デフォルトはCPU）。
+
+#### 処理内容
+1. **範囲の生成**:
+   ```python
+   arange = torch.arange(n, device=device)
+   ```
+   - 0から `n-1` までの整数を生成します。
+
+2. **自己インデックスの生成**:
+   ```python
+   index_self = repeat(arange, "h -> h w", w=n - 1)
+   ```
+   - 自身を示すインデックスを生成します。形状は `(n, n-1)` になります。
+
+3. **他のアイテムのインデックス生成**:
+   ```python
+   index_other = repeat(arange, "w -> h w", h=n).clone()
+   index_other += torch.ones((n, n), device=device, dtype=torch.int64).triu()
+   index_other = index_other[:, :-1]
+   ```
+   - 自身以外のアイテムを示すインデックスを生成します。上三角行列を加算し、最終的に列を削除します。
+
+4. **結果の返却**:
+   ```python
+   return index_self, index_other
+   ```
+
+### `generate_heterogeneous_index_transpose` 関数
+```python
+def generate_heterogeneous_index_transpose(
+    n: int,
+    device: torch.device = torch.device("cpu"),
+) -> tuple[Index, Index]:
+    """Generate an index that can be used to "transpose" the heterogeneous index.
+    Applying the index a second time inverts the "transpose."
+    """
+```
+- **引数**:
+  - `n`: インデックスのサイズ。
+  - `device`: テンソルを生成するデバイス。
+
+#### 処理内容
+1. **範囲の生成とワンマトリックスの作成**:
+   ```python
+   arange = torch.arange(n, device=device)
+   ones = torch.ones((n, n), device=device, dtype=torch.int64)
+   ```
+
+2. **自己インデックスの生成**:
+   ```python
+   index_self = repeat(arange, "w -> h w", h=n).clone()
+   index_self = index_self + ones.triu()
+   ```
+   - 自身を示すインデックスを生成し、上三角行列を加算します。
+
+3. **他のアイテムのインデックス生成**:
+   ```python
+   index_other = repeat(arange, "h -> h w", w=n)
+   index_other = index_other - (1 - ones.triu())
+   ```
+
+4. **結果の返却**:
+   ```python
+   return index_self[:, :-1], index_other[:, :-1]
+   ```
+
+### 全体の動作
+これらの関数は、自己ペアを除いた全てのペアのインデックスを生成するために使用され、特に行列の操作やテンソル計算に便利です。特に、2つ目の関数は「転置」操作を行うために使われます。
+
+### 使い方の例
+以下のように使うことができます。
+
+```python
+n = 5
+
+# 自己ペアを除いたインデックスの生成
+index_self, index_other = generate_heterogeneous_index(n)
+print("Self Index:\n", index_self)
+print("Other Index:\n", index_other)
+
+# 転置用のインデックスの生成
+transpose_self, transpose_other = generate_heterogeneous_index_transpose(n)
+print("Transpose Self Index:\n", transpose_self)
+print("Transpose Other Index:\n", transpose_other)
+```
+
+この例では、`n` の値を設定し、自己ペアを除いたインデックスを生成し、その結果を表示しています。また、転置用のインデックスも生成して表示しています。

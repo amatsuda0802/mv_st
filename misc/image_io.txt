@@ -1,0 +1,194 @@
+このコードは、画像と動画の入出力を行うための関数を定義しています。具体的には、画像を保存、読み込み、動画を保存するための機能を提供しています。以下に各関数の詳細を説明します。
+
+### インポート部分
+```python
+import io
+from pathlib import Path
+from typing import Union
+import skvideo.io
+
+import numpy as np
+import torch
+import torchvision.transforms as tf
+from einops import rearrange, repeat
+from jaxtyping import Float, UInt8
+from matplotlib.figure import Figure
+from PIL import Image
+from torch import Tensor
+```
+- **io**: 入出力操作のためのモジュール。
+- **Path**: ファイルパスを扱うためのモジュール。
+- **skvideo.io**: 動画の入出力を行うためのライブラリ。
+- **numpy**: 数値計算のためのライブラリ。
+- **torch**: PyTorchライブラリ。
+- **torchvision.transforms**: 画像変換用のライブラリ。
+- **einops**: テンソル操作を簡潔に行うためのライブラリ。
+- **jaxtyping**: JAXと互換性のある型ヒントを提供するライブラリ。
+- **matplotlib.figure**: 図を作成するためのライブラリ。
+- **PIL**: Python Imaging Library、画像処理のためのライブラリ。
+- **Tensor**: PyTorchのテンソル型を表します。
+
+### 型エイリアス
+```python
+FloatImage = Union[
+    Float[Tensor, "height width"],
+    Float[Tensor, "channel height width"],
+    Float[Tensor, "batch channel height width"],
+]
+```
+- **FloatImage**: 様々な形状の浮動小数点数のテンソルを表す型エイリアス。画像データを扱う際に使います。
+
+### `fig_to_image` 関数
+```python
+def fig_to_image(
+    fig: Figure,
+    dpi: int = 100,
+    device: torch.device = torch.device("cpu"),
+) -> Float[Tensor, "3 height width"]:
+```
+- **引数**:
+  - `fig`: Matplotlibの図。
+  - `dpi`: 解像度（デフォルトは100）。
+  - `device`: 使用するデバイス（デフォルトはCPU）。
+
+#### 処理内容
+1. **図をバッファに保存**:
+   ```python
+   buffer = io.BytesIO()
+   fig.savefig(buffer, format="raw", dpi=dpi)
+   ```
+2. **データを取得**:
+   ```python
+   data = np.frombuffer(buffer.getvalue(), dtype=np.uint8)
+   ```
+3. **データの形状を変更し、テンソルに変換**:
+   ```python
+   data = rearrange(data, "(h w c) -> c h w", h=h, w=w, c=4)
+   ```
+4. **RGBチャンネルを取得**:
+   ```python
+   return (torch.tensor(data, device=device, dtype=torch.float32) / 255)[:3]
+   ```
+
+### `prep_image` 関数
+```python
+def prep_image(image: FloatImage) -> UInt8[np.ndarray, "height width channel"]:
+```
+- **引数**: 
+  - `image`: 入力画像（浮動小数点数のテンソル）。
+
+#### 処理内容
+1. **バッチ画像の処理**:
+   ```python
+   if image.ndim == 4:
+       image = rearrange(image, "b c h w -> c h (b w)")
+   ```
+
+2. **単一チャンネル画像の処理**:
+   ```python
+   if image.ndim == 2:
+       image = rearrange(image, "h w -> () h w")
+   ```
+
+3. **チャンネルの確認と複製**:
+   ```python
+   if channel == 1:
+       image = repeat(image, "() h w -> c h w", c=3)
+   ```
+
+4. **値のクリッピングと変換**:
+   ```python
+   image = (image.detach().clip(min=0, max=1) * 255).type(torch.uint8)
+   ```
+
+5. **形状を変更してNumPy配列に変換**:
+   ```python
+   return rearrange(image, "c h w -> h w c").cpu().numpy()
+   ```
+
+### `save_image` 関数
+```python
+def save_image(
+    image: FloatImage,
+    path: Union[Path, str],
+) -> None:
+```
+- **引数**:
+  - `image`: 保存する画像。
+  - `path`: 保存先のパス。
+
+#### 処理内容
+1. **ディレクトリの作成**:
+   ```python
+   path.parent.mkdir(exist_ok=True, parents=True)
+   ```
+
+2. **画像を保存**:
+   ```python
+   Image.fromarray(prep_image(image)).save(path)
+   ```
+
+### `load_image` 関数
+```python
+def load_image(
+    path: Union[Path, str],
+) -> Float[Tensor, "3 height width"]:
+```
+- **引数**:
+  - `path`: 読み込む画像のパス。
+
+#### 処理内容
+- 画像をテンソルに変換して返します。
+
+### `save_video` 関数
+```python
+def save_video(
+    images: list[FloatImage],
+    path: Union[Path, str],
+) -> None:
+```
+- **引数**:
+  - `images`: 保存する画像のリスト。
+  - `path`: 保存先のパス。
+
+#### 処理内容
+1. **ディレクトリの作成**:
+   ```python
+   path.parent.mkdir(exist_ok=True, parents=True)
+   ```
+
+2. **フレームを準備**:
+   ```python
+   for image in images:
+       frames.append(prep_image(image))
+   ```
+
+3. **動画を保存**:
+   ```python
+   writer = skvideo.io.FFmpegWriter(path, outputdict={'-pix_fmt': 'yuv420p', '-crf': '21', '-vf': f'setpts=1.*PTS'})
+   ```
+
+4. **フレームを書き込み**:
+   ```python
+   for frame in frames:
+       writer.writeFrame(frame)
+   writer.close()
+   ```
+
+### 使い方の例
+以下のようにしてこれらの関数を使うことができます。
+
+```python
+# 画像を保存する
+image = torch.rand(3, 256, 256)  # 乱数で生成した画像
+save_image(image, "output/image.png")
+
+# 画像を読み込む
+loaded_image = load_image("output/image.png")
+
+# 動画を保存する
+images = [torch.rand(3, 256, 256) for _ in range(10)]  # 10フレームのランダム画像
+save_video(images, "output/video.mp4")
+```
+
+このコードは、画像や動画を扱う際に非常に便利な機能を提供しています。画像処理やデータの視覚化に役立ちます。
