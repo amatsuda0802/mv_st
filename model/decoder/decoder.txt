@@ -1,0 +1,85 @@
+このコードは、ディープラーニングのモデルを構成するための抽象クラスとデータ構造を定義しています。以下に各部分を詳しく説明します。
+
+### インポート部分
+```python
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Generic, Literal, TypeVar
+
+from jaxtyping import Float
+from torch import Tensor, nn
+
+from ...dataset import DatasetCfg
+from ..types import Gaussians
+```
+- **`ABC`, `abstractmethod`**: 抽象クラスを定義するためのモジュール。
+- **`dataclass`**: データクラスを定義するためのデコレーター。
+- **`Generic`, `Literal`, `TypeVar`**: 型ヒントを使用するためのツール。
+- **`Float`, `Tensor`, `nn`**: PyTorchおよびjaxtypingからのインポート。
+
+### DepthRenderingMode
+```python
+DepthRenderingMode = Literal[
+    "depth",
+    "log",
+    "disparity",
+    "relative_disparity",
+]
+```
+- **`DepthRenderingMode`**: 深度レンダリングのモードを表すリテラル型で、可能な値は「depth」、「log」、「disparity」、「relative_disparity」です。
+
+### DecoderOutputデータクラス
+```python
+@dataclass
+class DecoderOutput:
+    color: Float[Tensor, "batch view 3 height width"]
+    depth: Float[Tensor, "batch view height width"] | None
+```
+- **`DecoderOutput`**: デコーダーの出力を表すデータクラスです。
+  - `color`: RGB色情報を持つテンソル（バッチサイズ x ビュー数 x 高さ x 幅）。
+  - `depth`: 深度情報を持つテンソル（バッチサイズ x ビュー数 x 高さ x 幅）または`None`。
+
+### Decoderクラス
+```python
+class Decoder(nn.Module, ABC, Generic[T]):
+    cfg: T
+    dataset_cfg: DatasetCfg
+
+    def __init__(self, cfg: T, dataset_cfg: DatasetCfg) -> None:
+        super().__init__()
+        self.cfg = cfg
+        self.dataset_cfg = dataset_cfg
+```
+- **`Decoder`**: PyTorchのニューラルネットワークモジュールの基底クラスであり、抽象クラスです。
+  - **ジェネリック型** `T`: デコーダーの設定を表す型。
+  - `cfg`: デコーダーの設定を保持します。
+  - `dataset_cfg`: データセットの設定を保持します。
+  - コンストラクタでは、設定とデータセット設定を初期化します。
+
+### `forward`メソッド
+```python
+@abstractmethod
+def forward(
+    self,
+    gaussians: Gaussians,
+    extrinsics: Float[Tensor, "batch view 4 4"],
+    intrinsics: Float[Tensor, "batch view 3 3"],
+    near: Float[Tensor, "batch view"],
+    far: Float[Tensor, "batch view"],
+    image_shape: tuple[int, int],
+    depth_mode: DepthRenderingMode | None = None,
+) -> DecoderOutput:
+    pass
+```
+- **`forward`**: 抽象メソッドで、実際のデコーダーの実装でオーバーライドされるべきです。
+  - **引数**:
+    - `gaussians`: ガウス分布のデータ。
+    - `extrinsics`: カメラの外部パラメータ。
+    - `intrinsics`: カメラの内部パラメータ。
+    - `near`, `far`: クリップ面の距離。
+    - `image_shape`: 出力画像の形状（幅と高さ）。
+    - `depth_mode`: 使用する深度モード（デフォルトは`None`）。
+  - **戻り値**: `DecoderOutput`型の出力。
+
+### まとめ
+このコードは、3Dシーンのデコーディングを行うための基盤を提供します。具体的なデコーダーの実装はこのクラスを継承し、`forward`メソッドをオーバーライドすることで実現されます。さらに質問があればお知らせください！

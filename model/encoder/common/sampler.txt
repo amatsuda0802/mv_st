@@ -1,0 +1,52 @@
+このコードは、確率分布からサンプリングを行うための`Sampler`クラスを定義しています。以下に、各メソッドの詳細を解説します。
+
+### 1. `Sampler`クラス
+このクラスは、与えられた確率分布に基づいてサンプリングを行う機能を提供します。
+
+### 2. `forward`メソッド
+このメソッドは、確率分布からサンプルを生成します。
+
+#### 引数
+- `probabilities`: 確率分布を表すテンソル（形状は \(*\text{batch} \, \text{bucket}\)）。
+- `num_samples`: 生成するサンプルの数（整数）。
+- `deterministic`: 決定的にサンプリングするかどうかのフラグ（ブール値）。
+
+#### 処理の流れ
+1. **サンプリング方法の選択**:
+   - `deterministic`が`True`の場合、`gather_discrete_topk`関数を呼び出して、確率の上位`num_samples`個を取得します。
+   - `deterministic`が`False`の場合、`sample_discrete_distribution`関数を呼び出して、確率分布からランダムにサンプルを生成します。
+
+2. **戻り値**:
+   - 戻り値は、サンプリングしたインデックスとその確率密度のタプルです。
+   ```python
+   return (
+       gather_discrete_topk(probabilities, num_samples)
+       if deterministic
+       else sample_discrete_distribution(probabilities, num_samples)
+   )
+   ```
+
+### 3. `gather`メソッド
+このメソッドは、指定したインデックスに基づいてターゲットテンソルから値を取得します。
+
+#### 引数
+- `index`: サンプリングしたインデックス（形状は \(*\text{batch} \, \text{sample}\)）。
+- `target`: ターゲットテンソル（形状は \(*\text{batch} \, \text{bucket} \, \text{*shape}\)）。
+
+#### 処理の流れ
+1. **インデックスの次元調整**:
+   - `index`の次元が`target`の次元と一致するまで、`None`を追加して次元を拡張します。
+
+2. **ブロードキャストの形状設定**:
+   - `index`の形状をターゲットテンソルに合わせるためにブロードキャストの形状を計算します。
+
+3. **サンプリング**:
+   - `target`テンソルから、指定したインデックスに基づいて値を取得します。ここでは、`gather`メソッドを使ってインデックスを指定し、必要な値を取り出します。
+   ```python
+   return target.gather(dim=bucket_dim, index=index)
+   ```
+
+### まとめ
+この`Sampler`クラスは、確率的な選択を行うための機能を提供し、特に機械学習や統計的モデルでよく使用される確率分布からのサンプリングを簡潔に扱えるようになっています。`gather`メソッドにより、サンプリングされたインデックスに基づいてデータを取得する機能も実装されています。
+
+もしこのコードの特定の部分についてさらに詳しく知りたい場合や、別のトピックについて質問があれば教えてください！
