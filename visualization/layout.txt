@@ -1,0 +1,99 @@
+このコードは、PyTorchテンソルを使用して画像を処理するためのレイアウト関連のユーティリティ関数を提供しています。各関数の役割は、画像の結合、ボーダーの追加、リサイズなど、画像の配置や見た目を整えるために役立ちます。以下は各関数の詳細な説明です。
+
+---
+
+### 1. **`_sanitize_color`**
+
+```python
+def _sanitize_color(color: Color) -> Float[Tensor, "#channel"]:
+```
+
+- **役割**: 色を正しい形式に変換します。具体的には、色をリストやテンソルに変換し、PyTorchテンソルとして返します。色は `int` や `float`、リスト形式、またはテンソルで与えられることがありますが、最終的に統一されたテンソル形式にします。
+
+---
+
+### 2. **`_intersperse`**
+
+```python
+def _intersperse(iterable: Iterable, delimiter: Any) -> Generator[Any, None, None]:
+```
+
+- **役割**: イテラブル（リストなど）の要素の間に区切り（デリミタ）を挿入するジェネレータです。例えば、画像を並べる際に、画像の間にスペースを挿入する処理に使われます。
+
+---
+
+### 3. **`_get_main_dim` と `_get_cross_dim`**
+
+```python
+def _get_main_dim(main_axis: Axis) -> int:
+def _get_cross_dim(main_axis: Axis) -> int:
+```
+
+- **役割**: 画像を水平または垂直に並べる際に、並べる軸（メイン軸）やクロス軸（横方向か縦方向か）を取得します。例えば、`"horizontal"`（水平）の場合、メイン軸は幅（2次元目）、クロス軸は高さ（1次元目）を指します。
+
+---
+
+### 4. **`_compute_offset`**
+
+```python
+def _compute_offset(base: int, overlay: int, align: Alignment) -> slice:
+```
+
+- **役割**: 画像を結合する際、サイズが異なる画像をどう整列させるかを計算します。`start`（開始位置）、`center`（中央揃え）、`end`（終了位置）のいずれかに基づいて、オフセットを計算し、その位置に画像を配置します。
+
+---
+
+### 5. **`overlay`**
+
+```python
+def overlay(base: Float[Tensor, "channel base_height base_width"], ...)
+```
+
+- **役割**: `base` 画像の上に `overlay` 画像を指定された位置に貼り付けます。画像の位置揃えは、メイン軸とクロス軸に対して別々に指定できます。
+
+---
+
+### 6. **`cat`**
+
+```python
+def cat(main_axis: Axis, *images: Iterable[Float[Tensor, "channel _ _"]], ...)
+```
+
+- **役割**: 複数の画像を指定された軸（水平または垂直）に沿って結合します。画像のサイズが異なる場合、クロス軸で整列方法を指定できます。画像間にギャップを挿入することも可能です。
+
+---
+
+### 7. **`hcat` と `vcat`**
+
+```python
+def hcat(*images: Iterable[Float[Tensor, "channel _ _"]], ...)
+def vcat(*images: Iterable[Float[Tensor, "channel _ _"]], ...)
+```
+
+- **役割**: それぞれ、水平 (`hcat`) と垂直 (`vcat`) に画像を並べるためのヘルパー関数です。`cat` 関数のラッパーで、水平または垂直方向の並べ方を簡潔に指定できます。
+
+---
+
+### 8. **`add_border`**
+
+```python
+def add_border(image: Float[Tensor, "channel height width"], ...)
+```
+
+- **役割**: 画像の周りに指定された太さのボーダー（枠）を追加します。ボーダーの色も指定可能で、画像のサイズを変更することなくボーダーを追加します。
+
+---
+
+### 9. **`resize`**
+
+```python
+def resize(image: Float[Tensor, "channel height width"], ...)
+```
+
+- **役割**: 画像のサイズをリサイズします。`width` または `height` のいずれか一方、もしくは `(width, height)` を指定してリサイズします。リサイズには双線形補間（`bilinear`）を使用しています。
+
+---
+
+### まとめ
+
+このコードは、画像の結合や整列、リサイズ、ボーダー追加など、画像のレイアウトを柔軟に処理するための便利なユーティリティ関数を提供しています。主にPyTorchテンソルを操作し、効率的に画像を扱えるようになっています。

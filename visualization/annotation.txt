@@ -1,0 +1,146 @@
+このPythonコードは、画像にラベル（テキスト）を描画するための関数を定義しています。主に、テキストを描画して画像と結合する作業を行っています。それでは、各部分の詳しい説明をしていきます。
+
+---
+
+### インポート部分
+
+```python
+from pathlib import Path
+from string import ascii_letters, digits, punctuation
+
+import numpy as np
+import torch
+from einops import rearrange
+from jaxtyping import Float
+from PIL import Image, ImageDraw, ImageFont
+from torch import Tensor
+
+from .layout import vcat
+```
+
+- `pathlib.Path`: ファイルパスを扱うためのクラス。フォントファイルのパスとして使われます。
+- `ascii_letters`, `digits`, `punctuation`: 標準ライブラリ `string` からのインポートで、英数字や記号の文字列を扱います。
+- `numpy`: 画像データを処理するために使われるライブラリ。
+- `torch`: PyTorchライブラリで、テンソル操作やデバイス（CPUやGPU）管理を行います。
+- `einops.rearrange`: 配列やテンソルの次元の並べ替えを簡単に行うための関数。
+- `jaxtyping.Float`: 型アノテーションに用いられ、テンソルの形状やデータ型を表すのに役立ちます。
+- `PIL`: Python Imaging Libraryで、画像の生成や描画を行います。
+- `vcat`: レイアウトのために使われる関数で、縦に結合するために使われます。
+
+---
+
+### 定数の定義
+
+```python
+EXPECTED_CHARACTERS = digits + punctuation + ascii_letters
+```
+
+- `EXPECTED_CHARACTERS`: 文字列に使われる、英数字と記号のセット。この定数はフォントのサイズを測定する際に使用されます。
+
+---
+
+### `draw_label` 関数
+
+```python
+def draw_label(
+    text: str,
+    font: Path,
+    font_size: int,
+    device: torch.device = torch.device("cpu"),
+) -> Float[Tensor, "3 height width"]:
+    """Draw a black label on a white background with no border."""
+```
+
+#### 引数
+- `text`: 描画する文字列。
+- `font`: 使用するフォントのファイルパス（`Path`オブジェクトとして）。
+- `font_size`: フォントサイズ。
+- `device`: テンソルを置くデバイス（CPUまたはGPU）。デフォルトはCPU。
+
+#### 処理
+1. **フォントのロード**: 
+    ```python
+    font = ImageFont.truetype(str(font), font_size)
+    ```
+   指定されたフォントファイルからフォントを読み込む。もしフォントが見つからなければ、デフォルトのフォントを使用します。
+   
+2. **文字のサイズを計算**:
+    ```python
+    left, _, right, _ = font.getbbox(text)
+    ```
+   テキストのバウンディングボックス（文字を描画する領域）を取得します。`left` と `right` で幅を決定します。
+
+3. **画像領域の設定**:
+    ```python
+    image = Image.new("RGB", (width, height), color="white")
+    ```
+   計算された幅と高さに基づき、背景が白のRGB画像を作成します。
+
+4. **テキストを描画**:
+    ```python
+    draw.text((0, 0), text, font=font, fill="black")
+    ```
+   黒色でテキストを画像に描画します。
+
+5. **画像をテンソルに変換**:
+    ```python
+    image = torch.tensor(np.array(image) / 255, dtype=torch.float32, device=device)
+    ```
+   `PIL`の画像をNumPy配列に変換し、その後PyTorchのテンソルに変換します。このテンソルは0から1の範囲に正規化されており、指定されたデバイスに配置されます。
+
+6. **テンソルの次元変換**:
+    ```python
+    return rearrange(image, "h w c -> c h w")
+    ```
+   `einops.rearrange`を使ってテンソルの次元を `(高さ, 幅, チャンネル)` から `(チャンネル, 高さ, 幅)` に変更します。PyTorchの一般的なテンソルの形式に合わせています。
+
+---
+
+### `add_label` 関数
+
+```python
+def add_label(
+    image: Float[Tensor, "3 width height"],
+    label: str,
+    font: Path = Path("assets/Inter-Regular.otf"),
+    font_size: int = 24,
+) -> Float[Tensor, "3 width_with_label height_with_label"]:
+    return vcat(
+        draw_label(label, font, font_size, image.device),
+        image,
+        align="left",
+        gap=4,
+    )
+```
+
+#### 引数
+- `image`: 入力される画像のテンソル。
+- `label`: 追加するラベルの文字列。
+- `font`: ラベルに使うフォントファイルのパス。デフォルトは`assets/Inter-Regular.otf`。
+- `font_size`: フォントサイズ。デフォルトは24。
+
+#### 処理
+1. **ラベルの描画**: `draw_label`関数を使って、ラベルを描画します。
+    ```python
+    draw_label(label, font, font_size, image.device)
+    ```
+
+2. **画像とラベルを結合**:
+    ```python
+    return vcat(
+        draw_label(label, font, font_size, image.device),
+        image,
+        align="left",
+        gap=4,
+    )
+    ```
+   `vcat`関数を使用して、描画されたラベルと元の画像を縦方向に結合します。ラベルと画像の間には4ピクセルのスペースが空けられています。
+
+---
+
+### まとめ
+
+- `draw_label`: テキストラベルを指定されたフォントとフォントサイズで描画し、PyTorchのテンソル形式に変換する関数です。
+- `add_label`: 描画されたラベルを既存の画像に縦に結合し、ラベル付きの画像を作成します。
+
+これにより、PyTorchを使った画像処理ワークフローの中で、ラベル付きの画像を簡単に扱えるようになります。

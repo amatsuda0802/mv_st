@@ -1,0 +1,70 @@
+このコードは、ベクトル、スカラー、ペアを正規化し、適切な形状とデバイスに変換するための関数を定義しています。以下に、各関数とその役割について詳しく説明します。
+
+### 1. 型定義
+
+#### `Vector`
+`Vector`は、1次元または2次元のテンソルを含むさまざまな型を表現します。これは、スカラー値や反復可能なリストも含みます。
+
+```python
+Vector = Union[
+    Real,
+    Iterable[Real],
+    Shaped[Tensor, "3"],
+    Shaped[Tensor, "batch 3"],
+]
+```
+
+#### `Scalar`
+`Scalar`は、単一のスカラー値、またはバッチを持つスカラーを表現します。
+
+```python
+Scalar = Union[
+    Real,
+    Iterable[Real],
+    Shaped[Tensor, ""],
+    Shaped[Tensor, " batch"],
+]
+```
+
+#### `Pair`
+`Pair`は、2つの要素を持つタプルまたはテンソルを表現します。
+
+```python
+Pair = Union[
+    Iterable[Real],
+    Shaped[Tensor, "2"],
+]
+```
+
+### 2. 正規化関数
+
+#### `sanitize_vector`
+`sanitize_vector`は、与えられたベクトルを指定された次元に正規化し、必要に応じてデバイスに移動させます。以下はその処理の流れです。
+
+- **テンソルかリストかのチェック**: もし引数がテンソルでなければ、テンソルに変換します。
+- **次元数の調整**: ベクトルの次元が不足している場合、次元を追加します。
+- **最終形状の確認**: 最後に、次元数と形状が正しいか確認します。
+
+```python
+def sanitize_vector(vector: Vector, dim: int, device: torch.device) -> Float[Tensor, "*#batch dim"]:
+    # ... 詳細処理 ...
+```
+
+#### `sanitize_scalar`
+`sanitize_scalar`は、スカラー値を正規化し、必要に応じてデバイスに移動させます。次元数の調整も行います。
+
+```python
+def sanitize_scalar(scalar: Scalar, device: torch.device) -> Float[Tensor, "*#batch"]:
+    # ... 詳細処理 ...
+```
+
+#### `sanitize_pair`
+`sanitize_pair`は、ペアをテンソルに変換し、特定の形状（2要素）に整形します。
+
+```python
+def sanitize_pair(pair: Pair, device: torch.device) -> Float[Tensor, "2"]:
+    # ... 詳細処理 ...
+```
+
+### まとめ
+これらの関数は、入力の型と次元が異なる可能性がある場合に、それを統一された形状とデータ型に正規化するために使用されます。特に、深層学習のアプリケーションでは、データの形状が重要であるため、このような正規化は非常に役立ちます。

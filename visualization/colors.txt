@@ -1,0 +1,54 @@
+このコードでは、視覚的に区別しやすい色（DISTINCT_COLORSリスト内の色）を指定されたインデックスに基づいて取得するための関数 `get_distinct_color` を定義しています。以下は各部分の詳細な説明です。
+
+---
+
+### `DISTINCT_COLORS` リスト
+
+```python
+DISTINCT_COLORS = [
+    "#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4", "#46f0f0", "#f032e6",
+    "#bcf60c", "#fabebe", "#008080", "#e6beff", "#9a6324", "#fffac8", "#800000", "#aaffc3",
+    "#808000", "#ffd8b1", "#000075", "#808080", "#ffffff", "#000000",
+]
+```
+
+- このリストには、視覚的に区別しやすい20色以上のカラーコード（16進数表記）が含まれています。リストの元となったのは[Sasha Trubetskoyのカラーパレット](https://sashamaps.net/docs/resources/20-colors/)で、色のバリエーションが豊富です。
+- 16進数表記は `#RRGGBB` 形式で、`RR`, `GG`, `BB` がそれぞれ赤、緑、青の色強度（0～255）を表します。
+
+---
+
+### `get_distinct_color` 関数
+
+```python
+def get_distinct_color(index: int) -> tuple[float, float, float]:
+    hex = DISTINCT_COLORS[index % len(DISTINCT_COLORS)]
+    return tuple(x / 255 for x in ImageColor.getcolor(hex, "RGB"))
+```
+
+#### 引数
+- `index`: 使用する色を決定するためのインデックスです。例えば、`index = 0` なら最初の色 `#e6194b` が選ばれます。
+
+#### 処理
+1. **色の選択**:
+    ```python
+    hex = DISTINCT_COLORS[index % len(DISTINCT_COLORS)]
+    ```
+    `DISTINCT_COLORS` リストから、`index` を `len(DISTINCT_COLORS)` で割った余りに基づいて色を選びます。これにより、インデックスがリストの長さを超えても、リストの範囲内でループするようになっています。
+
+2. **16進カラーコードをRGB形式に変換**:
+    ```python
+    return tuple(x / 255 for x in ImageColor.getcolor(hex, "RGB"))
+    ```
+    `PIL.ImageColor.getcolor` を使って、16進数のカラーコードをRGB形式に変換します。この関数は `(R, G, B)` のタプルを返しますが、その値は0～255の範囲にあるため、色強度を0～1の範囲にスケールダウンするために `x / 255` で各要素を割ります。
+
+#### 出力
+- この関数は、RGBカラー値を0～1の範囲に正規化したタプル `(R, G, B)` を返します。
+  例: `index = 0` の場合、`#e6194b` は `(230, 25, 75)` に変換され、それを0～1の範囲にスケールすると `(0.902, 0.098, 0.294)` となります。
+
+---
+
+### まとめ
+
+- **`DISTINCT_COLORS`**: 視覚的に区別しやすい一連の色を定義したリストです。
+- **`get_distinct_color`**: リストから指定されたインデックスに基づいて色を選び、RGB形式に変換して、正規化された値を返します。
+- **用途**: グラフや可視化で色の衝突を避けたい場合などに使われます。

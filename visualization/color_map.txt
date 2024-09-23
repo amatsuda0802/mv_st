@@ -1,0 +1,147 @@
+このコードでは、主に2Dテンソルや画像にカラーマップを適用する関数を定義しています。カラーマップを使用して、テンソルに対応する色を付ける処理が行われています。それでは、各関数とコードの詳細な説明をしていきます。
+
+---
+
+### インポート部分
+
+```python
+import torch
+from colorspacious import cspace_convert
+from einops import rearrange
+from jaxtyping import Float
+from matplotlib import cm
+from torch import Tensor
+```
+
+- `torch`: PyTorchライブラリで、テンソル操作やデバイス管理を行います。
+- `colorspacious.cspace_convert`: 色空間間での変換を行うための関数。特定の色空間を別の色空間に変換します。
+- `einops.rearrange`: テンソルの次元を柔軟に並べ替えるためのライブラリ。
+- `jaxtyping.Float`: 型アノテーションに使用されるもので、テンソルの形状や型を表現します。
+- `matplotlib.cm`: カラーマップを管理する `matplotlib` モジュール。指定されたカラーマップに従って、データに色を適用します。
+
+---
+
+### `apply_color_map` 関数
+
+```python
+def apply_color_map(
+    x: Float[Tensor, " *batch"],
+    color_map: str = "inferno",
+) -> Float[Tensor, "*batch 3"]:
+```
+
+#### 引数
+- `x`: カラーマップを適用するテンソル。バッチや次元に関係なく使えるようになっています（`*batch` という形で、任意の次元数に対応）。
+- `color_map`: 使用するカラーマップ。デフォルトでは `inferno` を使用します。
+
+#### 処理
+1. **カラーマップの取得**:
+    ```python
+    cmap = cm.get_cmap(color_map)
+    ```
+   `matplotlib` のカラーマップを取得します。
+
+2. **テンソルを NumPy 配列に変換**:
+    ```python
+    mapped = cmap(x.detach().clip(min=0, max=1).cpu().numpy())[..., :3]
+    ```
+   テンソル `x` を `NumPy` 配列に変換し、カラーマップを適用します。`clip(min=0, max=1)` により、値が0から1の範囲にクリップされます。カラーマップはRGBA（4チャンネル）で返されますが、RGB部分のみを取り出しています（`[..., :3]`）。
+
+3. **テンソルに戻す**:
+    ```python
+    return torch.tensor(mapped, device=x.device, dtype=torch.float32)
+    ```
+   カラーマップが適用された `NumPy` 配列を再びPyTorchテンソルに変換し、元のテンソルと同じデバイスに配置します。
+
+---
+
+### `apply_color_map_to_image` 関数
+
+```python
+def apply_color_map_to_image(
+    image: Float[Tensor, "*batch height width"],
+    color_map: str = "inferno",
+) -> Float[Tensor, "*batch 3 height width"]:
+```
+
+#### 引数
+- `image`: カラーマップを適用する2Dの画像テンソル。高さと幅に関する次元があり、バッチ次元が任意で指定されています。
+- `color_map`: 使用するカラーマップ。
+
+#### 処理
+1. **カラーマップを適用**:
+    ```python
+    image = apply_color_map(image, color_map)
+    ```
+   先ほどの `apply_color_map` 関数を使って、画像にカラーマップを適用します。
+
+2. **次元を再構成**:
+    ```python
+    return rearrange(image, "... h w c -> ... c h w")
+    ```
+   `einops.rearrange` を使って、テンソルの次元を `(バッチ, 高さ, 幅, チャンネル)` から `(バッチ, チャンネル, 高さ, 幅)` に変更します。この形式はPyTorchで画像を扱う際の一般的なフォーマットです。
+
+---
+
+### `apply_color_map_2d` 関数
+
+```python
+def apply_color_map_2d(
+    x: Float[Tensor, "*#batch"],
+    y: Float[Tensor, "*#batch"],
+) -> Float[Tensor, "*batch 3"]:
+```
+
+#### 引数
+- `x`: 2D空間の横軸に対応するテンソル。
+- `y`: 2D空間の縦軸に対応するテンソル。
+
+#### 処理
+1. **色の定義**:
+    ```python
+    red = cspace_convert((189, 0, 0), "sRGB255", "CIELab")
+    blue = cspace_convert((0, 45, 255), "sRGB255", "CIELab")
+    white = cspace_convert((255, 255, 255), "sRGB255", "CIELab")
+    ```
+   赤 (`(189, 0, 0)`)、青 (`(0, 45, 255)`)、白 (`(255, 255, 255)`) のRGB色を `CIELab` カラー空間に変換します。`CIELab`は人間の視覚に近い色空間であり、色の差異を計算する際に適しています。
+
+2. **テンソルをクリップして NumPy に変換**:
+    ```python
+    x_np = x.detach().clip(min=0, max=1).cpu().numpy()[..., None]
+    y_np = y.detach().clip(min=0, max=1).cpu().numpy()[..., None]
+    ```
+   入力テンソル `x` と `y` をクリップし、NumPy配列に変換します。`[..., None]` はテンソルの最後に新しい次元を追加し、これにより色の補間が行いやすくなります。
+
+3. **色補間（赤と青の間）**:
+    ```python
+    interpolated = x_np * red + (1 - x_np) * blue
+    ```
+   `x` の値に基づき、赤と青の間で線形補間を行います。`x_np` が0に近い場合は青、1に近い場合は赤に近づきます。
+
+4. **白色との補間**:
+    ```python
+    interpolated = y_np * interpolated + (1 - y_np) * white
+    ```
+   `y` の値に基づき、白色と先ほどの補間結果の間でさらに補間を行います。`y_np` が0に近い場合は白、1に近い場合は色が強調されます。
+
+5. **CIELab から RGB への変換**:
+    ```python
+    rgb = cspace_convert(interpolated, "CIELab", "sRGB1")
+    ```
+   最後に補間された色を `CIELab` から `sRGB` に変換します。これにより、ディスプレイ上で表示できるRGB値に変換されます。
+
+6. **テンソルに戻す**:
+    ```python
+    return torch.tensor(rgb, device=x.device, dtype=torch.float32).clip(min=0, max=1)
+    ```
+   RGB値を再びPyTorchテンソルに変換し、元のテンソルと同じデバイスに配置します。値を0から1の範囲にクリップします。
+
+---
+
+### まとめ
+
+- `apply_color_map`: テンソルにカラーマップを適用し、対応するRGBテンソルを作成します。
+- `apply_color_map_to_image`: 画像にカラーマップを適用し、PyTorch形式のテンソルを返します。
+- `apply_color_map_2d`: 2つのテンソル（`x` と `y`）に基づき、2次元の色補間を行い、RGB形式のテンソルを生成します。
+
+これらの関数は、データの可視化や解析において、特定の値に応じた色の付け方を提供するために役立ちます。

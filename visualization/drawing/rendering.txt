@@ -1,0 +1,69 @@
+このコードは、画像に対してマルチサンプリングアンチエイリアシング（MSAA）を実施するための一連の関数を定義しています。以下に各部分の詳細を説明します。
+
+### 主な構成要素
+
+#### 1. プロトコル `ColorFunction`
+このプロトコルは、与えられた2D座標に基づいてRGBA色を返す関数を定義します。
+
+```python
+@runtime_checkable
+class ColorFunction(Protocol):
+    def __call__(self, xy: Float[Tensor, "point 2"]) -> Float[Tensor, "point 4"]:
+        pass
+```
+
+#### 2. グリッド生成関数 `generate_sample_grid`
+指定された形状に基づいて、各ピクセルの中心位置を持つサンプルグリッドを生成します。
+
+```python
+def generate_sample_grid(shape: tuple[int, int], device: torch.device) -> Float[Tensor, "height width 2"]:
+    # ... グリッド生成処理 ...
+```
+
+#### 3. MSAAピクセル検出関数 `detect_msaa_pixels`
+画像内のピクセルのMSAAが必要かどうかを検出します。隣接するピクセル間で色が異なる場合にマスクを作成します。
+
+```python
+def detect_msaa_pixels(image: Float[Tensor, "batch 4 height width"]) -> Bool[Tensor, "batch height width"]:
+    # ... 差異検出処理 ...
+```
+
+#### 4. アルファの減少関数 `reduce_straight_alpha`
+RGBA色の重み付き平均を計算し、最終的な色と平均アルファ値を返します。
+
+```python
+def reduce_straight_alpha(rgba: Float[Tensor, "batch 4 height width"]) -> Float[Tensor, "batch 4"]:
+    # ... アルファ減少処理 ...
+```
+
+#### 5. MSAAパス実行関数 `run_msaa_pass`
+実際のMSAA処理を行うための再帰的関数です。サンプルグリッドを生成し、色を取得します。残りのパスがある場合、ピクセルを細分化して再度サンプリングします。
+
+```python
+@torch.no_grad()
+def run_msaa_pass(xy: Float[Tensor, "batch height width 2"], color_function: ColorFunction, scale: float, subdivision: int, remaining_passes: int, device: torch.device, batch_size: int = int(2**16)) -> Float[Tensor, "batch 4 height width"]:
+    # ... MSAA処理 ...
+```
+
+#### 6. レンダリング関数 `render`
+指定された形状と色関数に基づいて、RGBA画像を生成します。
+
+```python
+@torch.no_grad()
+def render(shape: tuple[int, int], color_function: ColorFunction, device: torch.device, subdivision: int = 8, num_passes: int = 2) -> Float[Tensor, "4 height width"]:
+    # ... レンダリング処理 ...
+```
+
+#### 7. 画像上に描画する関数 `render_over_image`
+既存の画像の上にレンダリング結果をオーバーレイします。アルファブレンディングを使用して、透過効果を実現します。
+
+```python
+def render_over_image(image: Float[Tensor, "3 height width"], color_function: ColorFunction, device: torch.device, subdivision: int = 8, num_passes: int = 1) -> Float[Tensor, "3 height width"]:
+    # ... 描画処理 ...
+```
+
+### 使用例
+このコードは、画像に対して滑らかで高品質な描画を実現するためのツールとして使用できます。特に、複雑なシーンやオブジェクトを描画する際に役立ちます。
+
+### まとめ
+この一連の関数は、MSAAを利用した高品質な画像レンダリングを提供します。これにより、視覚的なアーティファクトを減らし、より滑らかな描画結果を得ることができます。各関数は互いに連携しており、柔軟な描画が可能です。
