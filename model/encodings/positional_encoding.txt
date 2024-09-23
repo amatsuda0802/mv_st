@@ -1,0 +1,62 @@
+このコードは、位置エンコーディングを実装した`PositionalEncoding`クラスを定義しています。このクラスは、ニューラルネットワークの入力データに位置情報を追加するために使用されます。以下に、各部分の詳細な説明を行います。
+
+### クラスの概要
+
+#### `PositionalEncoding`
+- **目的**: 位置エンコーディングは、通常、Transformerモデルなどで使われ、入力シーケンスの位置情報を埋め込むために使用されます。この実装では、サンプルの値を\[0, 1\]の範囲でエンコードします。
+
+### 主要なメソッド
+
+#### `__init__(self, num_octaves: int)`
+- **引数**:
+  - `num_octaves`: 使用するオクターブの数を指定します。
+  
+- **処理**:
+  - オクターブごとの周波数を計算します。最低周波数は1周期を持ち、各オクターブで2倍になります。
+  - `frequencies`テンソルは、サイン波の周波数を保持します。形状は\[frequency, phase\]です。
+  - `phases`は、サインとコサインの位相を保持します。形状は\[frequency, phase\]です。
+
+```python
+def __init__(self, num_octaves: int):
+    super().__init__()
+    octaves = torch.arange(num_octaves).float()
+    frequencies = 2 * torch.pi * 2**octaves
+    frequencies = repeat(frequencies, "f -> f p", p=2)
+    self.register_buffer("frequencies", frequencies, persistent=False)
+
+    phases = torch.tensor([0, 0.5 * torch.pi], dtype=torch.float32)
+    phases = repeat(phases, "p -> f p", f=num_octaves)
+    self.register_buffer("phases", phases, persistent=False)
+```
+
+#### `forward(self, samples: Float[Tensor, "*batch dim"])`
+- **引数**:
+  - `samples`: 入力テンソルで、サンプルのデータを持つ。形状は\[batch, dim\]。
+
+- **処理**:
+  - 入力`samples`に周波数を掛け、サイン関数を適用します。この操作により、位置に基づくエンコーディングが生成されます。
+  - 結果は形状を変更して、出力テンソルを作成します。
+
+```python
+def forward(self, samples: Float[Tensor, "*batch dim"]) -> Float[Tensor, "*batch embedded_dim"]:
+    samples = einsum(samples, self.frequencies, "... d, f p -> ... d f p")
+    return rearrange(torch.sin(samples + self.phases), "... d f p -> ... (d f p)")
+```
+
+#### `d_out(self, dimensionality: int)`
+- **引数**:
+  - `dimensionality`: 出力の次元数を指定します。
+
+- **処理**:
+  - 出力の次元数を計算します。これは、周波数の数と指定された次元数の積です。
+
+```python
+def d_out(self, dimensionality: int):
+    return self.frequencies.numel() * dimensionality
+```
+
+### 使用例
+この`PositionalEncoding`クラスは、特にTransformerなどのモデルで位置情報を付加する際に便利です。サンプルデータを入力として与えると、そのデータに対してサイン関数を用いてエンコードされた出力を返します。これは、モデルが入力の相対的な位置を学習するのに役立ちます。
+
+### まとめ
+この実装は、シンプルでありながら強力な位置エンコーディングの手法を提供しています。サンプルの値を周波数と位相を用いてエンコードすることで、位置情報を効果的にモデルに組み込むことができます。

@@ -1,0 +1,107 @@
+このコードは、自己注意（self-attention）を使用して特徴を伝播するための`SelfAttnPropagation`クラスを含んでいます。以下に、各部分の詳細な解説を提供します。
+
+### 1. インポート文
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from .utils import split_feature, merge_splits, split_feature_1d, merge_splits_1d
+```
+- **`torch`**: PyTorchライブラリをインポート。
+- **`nn`**: PyTorchのニューラルネットワークモジュール。
+- **`F`**: PyTorchの関数モジュール、特に関数ベースのオペレーション（例：`F.unfold`）。
+- **`utils`**: 特徴の分割と結合を行うユーティリティ関数が含まれています。
+
+### 2. 自己注意の関数
+#### 2.1 `single_head_full_attention`
+```python
+def single_head_full_attention(q, k, v):
+    ...
+    return out
+```
+- **引数**:
+  - `q`, `k`, `v`: クエリ、キー、バリューのテンソル。各テンソルのサイズは`[B, L, C]`です。
+  
+- **処理**:
+  - クエリとキーを使ってスコアを計算し、ソフトマックスを適用して注意重みを得ます。
+  - 得られた注意重みをバリューに適用して出力を計算します。
+
+#### 2.2 `single_head_full_attention_1d`
+```python
+def single_head_full_attention_1d(q, k, v, h=None, w=None):
+    ...
+    return out
+```
+- **処理**:
+  - 1Dテンソルのための注意メカニズムを実装しています。
+  - 高さ`h`と幅`w`を持つテンソルを想定しており、適切にテンソルの形状を変換しています。
+
+#### 2.3 `single_head_split_window_attention`
+```python
+def single_head_split_window_attention(q, k, v, num_splits=1, with_shift=False, h=None, w=None, attn_mask=None):
+    ...
+    return out
+```
+- **処理**:
+  - 注意のウィンドウを分割して処理します。
+  - `num_splits`によってウィンドウのサイズを決定し、必要に応じてシフトを行います。
+
+#### 2.4 `single_head_split_window_attention_1d`
+```python
+def single_head_split_window_attention_1d(q, k, v, relative_position_bias=None, num_splits=1, with_shift=False, h=None, w=None, attn_mask=None):
+    ...
+    return out
+```
+- **処理**:
+  - 1D用の分割ウィンドウ注意メカニズムを実装しています。
+  - テンソルの形状を変換し、分割されたウィンドウで注意を計算します。
+
+### 3. `SelfAttnPropagation` クラス
+#### 3.1. コンストラクタ
+```python
+class SelfAttnPropagation(nn.Module):
+    def __init__(self, in_channels, **kwargs):
+        super(SelfAttnPropagation, self).__init__()
+        self.q_proj = nn.Linear(in_channels, in_channels)
+        self.k_proj = nn.Linear(in_channels, in_channels)
+        
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+```
+- **引数**:
+  - `in_channels`: 入力チャネルの数。
+
+- **処理**:
+  - クエリとキーのプロジェクション用の線形層を初期化します。
+  - パラメータの初期化を行います。
+
+#### 3.2. `forward` メソッド
+```python
+def forward(self, feature0, flow, local_window_attn=False, local_window_radius=1, **kwargs):
+    ...
+    return out
+```
+- **引数**:
+  - `feature0`: 入力特徴（サイズは`[B, C, H, W]`）。
+  - `flow`: 入力フロー（サイズは`[B, 2, H, W]`）。
+  
+- **処理**:
+  - フローに基づいて自己注意を適用し、結果を出力します。
+  - ローカルウィンドウ注意を使用する場合は、`forward_local_window_attn`メソッドを呼び出します。
+
+#### 3.3. `forward_local_window_attn` メソッド
+```python
+def forward_local_window_attn(self, feature0, flow, local_window_radius=1):
+    ...
+    return out
+```
+- **処理**:
+  - ローカルウィンドウに対して注意を計算し、フローを更新します。
+  - `F.unfold`を使用して近傍の特徴を取得し、注意を計算します。
+
+### まとめ
+このコードは、自己注意メカニズムを使用して特徴を伝播させるための機能を提供しています。特に、ウィンドウベースの注意やローカルな注意を効率的に処理する手法が実装されています。これにより、特徴を文脈に応じて柔軟に結合し、フローやその他の情報を活用できます。
+
+特定の機能やパラメータについてさらに詳しく知りたい場合は、お知らせください！

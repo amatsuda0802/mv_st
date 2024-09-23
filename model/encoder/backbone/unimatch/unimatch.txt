@@ -1,0 +1,70 @@
+このコードは、`UniMatch`という名前のニューラルネットワークモデルを実装しています。このモデルは、主にフロー（光フロー）や深度推定タスクに使用されます。以下に、主要な部分について詳しく説明します。
+
+### 1. クラス構造と初期化
+
+```python
+class UniMatch(nn.Module):
+    def __init__(self, num_scales=1, feature_channels=128, upsample_factor=8, num_head=1,
+                 ffn_dim_expansion=4, num_transformer_layers=6, reg_refine=False, task='flow'):
+```
+
+- **引数**:
+  - `num_scales`: マルチスケールの数（デフォルトは1）。
+  - `feature_channels`: 特徴マップのチャンネル数。
+  - `upsample_factor`: アップサンプリングの倍率。
+  - `num_head`: トランスフォーマーのヘッド数。
+  - `ffn_dim_expansion`: フィードフォワードネットワークの次元拡張係数。
+  - `num_transformer_layers`: トランスフォーマーのレイヤー数。
+  - `reg_refine`: 局所回帰の精密化の有無。
+  - `task`: タスクの種類（"flow"または"depth"）。
+
+- **初期化処理**:
+  - CNNエンコーダーやトランスフォーマー、自己注意の伝播、特徴のアップサンプリング層など、必要なモジュールを初期化します。
+
+### 2. 特徴の抽出
+
+```python
+def extract_feature(self, img0, img1):
+    concat = torch.cat((img0, img1), dim=0)  # [2B, C, H, W]
+    features = self.backbone(concat)
+```
+
+- 2つの画像を結合してCNNエンコーダーを通し、特徴マップを取得します。得られた特徴は低解像度から高解像度に並び替えられます。
+
+### 3. フローのアップサンプリング
+
+```python
+def upsample_flow(self, flow, feature, bilinear=False, upsample_factor=8, is_depth=False):
+```
+
+- フローをアップサンプリングするメソッドです。バイリニア補間またはカスタムアップサンプリング層を使用できます。
+
+### 4. フォワードパス
+
+```python
+def forward(self, img0, img1, ...):
+```
+
+- **引数**: `img0`, `img1` - 入力画像。
+- **処理**:
+  - 入力画像を正規化し、特徴を抽出します。
+  - タスクに応じて、フローまたは深度の予測を行います。
+  - トランスフォーマーを使用して特徴を処理し、コレlationを計算してフローを推定します。
+  - 各スケールでフローをアップサンプリングし、必要に応じて自己注意を使用してフローを伝播させます。
+  - 最後に、フロー予測をリストとして保存します。
+
+### 5. 出力結果
+
+```python
+results_dict.update({'flow_preds': flow_preds})
+```
+
+- フロー予測を辞書に追加して返します。
+
+### 6. 注意点
+
+- `pred_bidir_flow`がTrueの場合、双方向フローを予測します。
+- タスクが"depth"の場合は、マルチスケールモデルはサポートされていません。
+- 局所回帰の精密化を行うオプションがありますが、これには特定の条件が必要です。
+
+このモデルは、特に光フローや深度推定において、マルチスケール処理とトランスフォーマーを活用することで高精度な結果を目指しています。複雑な処理を段階的に行い、特徴の相関を利用することが特徴です。
