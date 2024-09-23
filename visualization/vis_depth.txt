@@ -1,0 +1,70 @@
+このコードは、深度（`disp`）や視差（`disparity`）を可視化するための2つの関数を提供しています。視差マップや深度マップを視覚的に分かりやすくするために、色マッピングを使用しています。
+
+---
+
+### 1. **`vis_disparity`**
+```python
+def vis_disparity(disp):
+    disp_vis = (disp - disp.min()) / (disp.max() - disp.min()) * 255.0
+    disp_vis = disp_vis.astype("uint8")
+    disp_vis = cv2.applyColorMap(disp_vis, cv2.COLORMAP_INFERNO)
+    
+    return disp_vis
+```
+
+- **役割**: この関数は、視差マップ（`disp`）を色付き画像として可視化します。視差マップは通常グレースケールで、これをカラー画像に変換することで、人間にとって視覚的に解釈しやすくします。
+
+- **処理の流れ**:
+  1. `disp`の値を最小値と最大値の間で正規化します。
+  2. 正規化された値を255倍し、`uint8`型に変換します（ピクセル値が0〜255になるように）。
+  3. OpenCVの`applyColorMap`関数を使って、`COLORMAP_INFERNO`というカラーマップを適用します。これにより、視差マップがカラフルな画像になります。
+
+---
+
+### 2. **`viz_depth_tensor`**
+```python
+def viz_depth_tensor(disp, return_numpy=False, colormap='plasma'):
+    assert isinstance(disp, torch.Tensor)
+    
+    disp = disp.numpy()
+    vmax = np.percentile(disp, 95)
+    normalizer = mpl.colors.Normalize(vmin=disp.min(), vmax=vmax)
+    mapper = cm.ScalarMappable(norm=normalizer, cmap=colormap)
+    colormapped_im = (mapper.to_rgba(disp)[:, :, :3] * 255).astype(np.uint8)  # [H, W, 3]
+    
+    if return_numpy:
+        return colormapped_im
+    
+    viz = torch.from_numpy(colormapped_im).permute(2, 0, 1)  # [3, H, W]
+    
+    return viz
+```
+
+- **役割**: この関数は、PyTorchテンソルとして与えられた深度マップを色付き画像として可視化します。こちらは深度（`disp`）に対して色を付けるために、Matplotlibのカラーマッピング機能を使用しています。
+
+- **主な処理**:
+  1. `disp`がPyTorchテンソルであることを確認します。
+  2. `disp`をNumPy配列に変換します。
+  3. 画像の値域を設定し、95パーセンタイルまでを最大値として正規化します（これにより、非常に大きな異常値がある場合でも画像が適切に表示されます）。
+  4. Matplotlibのカラーマッピング機能を使って、指定したカラーマップ（デフォルトは`plasma`）を適用します。
+  5. `colormapped_im`として、カラーマップを適用した画像をNumPy配列で取得します。
+  6. オプションで、このNumPy画像を返すことができ、そうでなければPyTorchテンソルに変換して返します（チャンネル次元を先頭に移動）。
+
+---
+
+### カラーマッピングの詳細
+
+両方の関数は、色を使ってデータの特徴を視覚化するために、カラーマップを利用します。これにより、深度や視差データの値の違いが色の違いとして認識できるようになります。
+
+- **`cv2.applyColorMap`**:
+  - OpenCVの関数で、視差マップを直接色付き画像に変換します。`COLORMAP_INFERNO`は赤から黄色へのグラデーションを使ったカラーマップです。
+
+- **`matplotlib.cm.ScalarMappable`**:
+  - Matplotlibの関数で、`Normalize`とカラーマップを使ってデータを正規化し、色にマッピングします。`plasma`は紫から黄色へのグラデーションを使ったカラーマップです。
+
+---
+
+### まとめ
+
+- **`vis_disparity`** は視差マップをOpenCVのカラーマップで視覚化します。
+- **`viz_depth_tensor`** は深度マップをMatplotlibのカラーマップで視覚化します。
